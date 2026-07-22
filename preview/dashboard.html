@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>MaxGuard Preview</title>
+    <link href="../public/vendor/metronic/assets/plugins/global/plugins.bundle.css" rel="stylesheet">
+    <link href="../public/vendor/metronic/assets/css/style.bundle.css" rel="stylesheet">
+    <link href="../public/css/maxguard.css" rel="stylesheet">
+</head>
+<body class="mg-body">
+<div class="mg-app">
+    <aside class="mg-sidebar">
+        <div class="mg-brand"><a class="mg-brand-link" href="#"><span class="mg-brand-mark">M</span><span><strong>MaxGuard</strong><small>Publisher compliance</small></span></a></div>
+        <nav class="mg-nav"><span class="mg-nav-label">Workspace</span><a class="mg-nav-link active" href="#"><i class="bi bi-grid"></i><span>Overview</span></a><a class="mg-nav-link" href="#"><i class="bi bi-globe2"></i><span>Sites</span></a><a class="mg-nav-link" href="#"><i class="bi bi-exclamation-triangle"></i><span>Findings</span><span class="mg-nav-count">7</span></a><a class="mg-nav-link" href="#"><i class="bi bi-upc-scan"></i><span>Scan center</span></a><a class="mg-nav-link" href="#"><i class="bi bi-file-earmark-check"></i><span>Evidence</span></a><a class="mg-nav-link" href="#"><i class="bi bi-bar-chart"></i><span>Reports</span></a></nav>
+        <div class="mg-coverage-card"><div class="d-flex justify-content-between mb-2"><span class="fw-semibold text-white">Coverage</span><span class="mg-live-dot">Live</span></div><div class="fs-7 text-white-50 mb-4">21 of 24 sites protected</div><div class="progress h-6px bg-white bg-opacity-10"><div class="progress-bar bg-info" style="width:88%"></div></div><div class="fs-8 text-info mt-3">88% portfolio coverage</div></div>
+    </aside>
+    <div class="mg-workspace">
+        <header class="mg-header"><div class="d-flex align-items-center flex-grow-1"><label class="mg-search"><i class="bi bi-search"></i><input placeholder="Search sites, URLs or findings…"><kbd>⌘ K</kbd></label></div><div class="d-flex align-items-center gap-3"><button class="btn btn-icon btn-light position-relative"><i class="bi bi-bell"></i><span class="mg-notification-dot"></span></button><button class="mg-user"><span class="mg-avatar">TT</span><span class="d-none d-sm-block text-start"><strong>Trung Trần</strong><small>Administrator</small></span></button></div></header>
+        <main class="mg-content">
+            <div class="mg-page-heading"><div><h1>Portfolio overview</h1><p>See risk, revenue exposure and remediation priorities across every site.</p></div><button class="btn btn-primary px-5"><i class="bi bi-upc-scan me-2"></i>Run full scan</button></div>
+            <div class="row g-5 mb-5">
+                <div class="col-sm-6 col-xxl-3"><div class="card mg-card h-100"><div class="card-body p-6"><div class="d-flex justify-content-between"><div><div class="mg-eyebrow mb-3">Total sites</div><div class="mg-metric-value">24</div></div><span class="mg-icon-box mg-icon-box-primary"><i class="bi bi-globe2"></i></span></div><div class="mg-metric-note text-primary mt-5">21 monitored</div></div></div></div>
+                <div class="col-sm-6 col-xxl-3"><div class="card mg-card h-100"><div class="card-body p-6"><div class="d-flex justify-content-between"><div><div class="mg-eyebrow mb-3">Compliance score</div><div class="mg-metric-value">87</div></div><span class="mg-icon-box mg-icon-box-success"><i class="bi bi-shield-check"></i></span></div><div class="mg-metric-note text-success mt-5">4.2% higher this month</div></div></div></div>
+                <div class="col-sm-6 col-xxl-3"><div class="card mg-card h-100"><div class="card-body p-6"><div class="d-flex justify-content-between"><div><div class="mg-eyebrow mb-3">Critical issues</div><div class="mg-metric-value">7</div></div><span class="mg-icon-box mg-icon-box-danger"><i class="bi bi-exclamation-triangle"></i></span></div><div class="mg-metric-note text-danger mt-5">3 require action today</div></div></div></div>
+                <div class="col-sm-6 col-xxl-3"><div class="card mg-card h-100"><div class="card-body p-6"><div class="d-flex justify-content-between"><div><div class="mg-eyebrow mb-3">Protected revenue</div><div class="mg-metric-value">$48.2K</div></div><span class="mg-icon-box mg-icon-box-info"><i class="bi bi-currency-dollar"></i></span></div><div class="mg-metric-note text-info mt-5">estimated monthly</div></div></div></div>
+            </div>
+            <div class="row g-5 mb-5">
+                <div class="col-xl-8"><div class="card mg-card h-100"><div class="card-header border-0 pt-2"><div class="card-title d-block"><h2 class="mg-card-title">Compliance trend</h2><p class="mg-card-subtitle">Portfolio score over the last 12 weeks</p></div><span class="badge badge-light">Last 12 weeks</span></div><div class="card-body pt-0"><div id="compliance-trend-chart" class="mg-chart"></div></div></div></div>
+                <div class="col-xl-4"><div class="card mg-card h-100"><div class="card-header border-0 pt-2"><div class="card-title d-block"><h2 class="mg-card-title">Portfolio health</h2><p class="mg-card-subtitle">24 sites ranked by current risk</p></div></div><div class="card-body pt-2"><div class="mg-health-grid"><div class="mg-health-donut"><div><strong>24</strong><small>sites</small></div></div><div class="mg-health-legend"><div><span class="bg-success"></span><em>Healthy</em><strong>15</strong></div><div><span class="bg-warning"></span><em>Needs review</em><strong>6</strong></div><div><span class="bg-danger"></span><em>Critical</em><strong>3</strong></div></div></div><button class="btn btn-light-primary w-100 mt-5">View all sites</button></div></div></div>
+            </div>
+            <div class="card mg-card"><div class="card-header border-0 pt-2"><div class="card-title d-block"><h2 class="mg-card-title">Sites requiring attention</h2><p class="mg-card-subtitle">Sorted by potential AdSense impact</p></div><select class="form-select form-select-sm w-150px"><option>All risk levels</option></select></div><div class="card-body pt-0"><div class="table-responsive"><table class="table align-middle table-row-dashed gy-4 mg-table"><thead><tr class="text-uppercase text-muted fs-8"><th>Site</th><th>Score</th><th>Top risk</th><th>Findings</th><th>Last scan</th><th class="text-end">Status</th></tr></thead><tbody>
+                <tr><td><a class="mg-site-cell"><span>S</span><strong>starhotnews.kingka.info</strong></a></td><td><strong class="mg-score-text mg-score-critical">62</strong></td><td>Copyright / reused content</td><td><strong>14</strong></td><td>8 min ago</td><td class="text-end"><span class="badge mg-status mg-status-danger">Critical</span></td></tr>
+                <tr><td><a class="mg-site-cell"><span>D</span><strong>dailytrendhub.com</strong></a></td><td><strong class="mg-score-text mg-score-high">74</strong></td><td>Invalid traffic pattern</td><td><strong>8</strong></td><td>36 min ago</td><td class="text-end"><span class="badge mg-status mg-status-warning">High</span></td></tr>
+                <tr><td><a class="mg-site-cell"><span>H</span><strong>howtofinance.net</strong></a></td><td><strong class="mg-score-text mg-score-review">81</strong></td><td>Ad density on mobile</td><td><strong>5</strong></td><td>2 hours ago</td><td class="text-end"><span class="badge mg-status mg-status-info">Review</span></td></tr>
+                <tr><td><a class="mg-site-cell"><span>F</span><strong>freshhomeideas.co</strong></a></td><td><strong class="mg-score-text mg-score-healthy">96</strong></td><td>No blocking issues</td><td><strong>1</strong></td><td>Yesterday</td><td class="text-end"><span class="badge mg-status mg-status-success">Healthy</span></td></tr>
+            </tbody></table></div></div></div>
+        </main>
+    </div>
+</div>
+<script src="../public/vendor/metronic/assets/plugins/global/plugins.bundle.js"></script>
+<script>window.MaxGuardPage={trend:[43,48,47,56,55,63,62,70,68,76,75,82,81,88,87,94],trendLabels:['May 6','','May 20','','Jun 3','','Jun 17','','Jul 1','','Jul 15','','Jul 29','','Aug 12','Now']};</script>
+<script src="../public/js/maxguard.js"></script>
+</body>
+</html>

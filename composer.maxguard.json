@@ -1,0 +1,13 @@
+{
+    "description": "Compatibility requirements for the MaxGuard Laravel 10 integration overlay",
+    "require": {
+        "php": "^8.1",
+        "ext-curl": "*",
+        "ext-dom": "*",
+        "ext-json": "*",
+        "ext-libxml": "*",
+        "ext-mbstring": "*",
+        "ext-simplexml": "*",
+        "laravel/framework": "^10.0"
+    }
+}
