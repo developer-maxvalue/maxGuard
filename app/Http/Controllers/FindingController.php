@@ -4,40 +4,23 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\UpdateFindingRequest;
 use App\Models\Finding;
+use App\Models\Scan;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
+use PhpOffice\PhpSpreadsheet\Cell\DataType;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 final class FindingController extends Controller
 {
     public function index(): View|StreamedResponse
     {
-        $query = Finding::query()
-            ->whereHas('website', fn ($query) => $query->accessibleBy(auth()->id()))
-            ->with(['website', 'page'])
-            ->latest('last_seen_at');
-
-        if (request()->filled('severity')) {
-            $query->where('severity', request('severity'));
-        }
-        if (request()->filled('category')) {
-            $query->where('category', request('category'));
-        }
-        if (request()->filled('status')) {
-            $query->where('status', request('status'));
-        }
-        if (request()->filled('q')) {
-            $search = '%'.str_replace(['%', '_'], ['\\%', '\\_'], (string) request('q')).'%';
-            $query->where(function ($query) use ($search): void {
-                $query->where('title', 'like', $search)
-                    ->orWhere('summary', 'like', $search)
-                    ->orWhere('public_id', 'like', $search)
-                    ->orWhereHas('website', fn ($query) => $query->where('domain', 'like', $search))
-                    ->orWhereHas('page', fn ($query) => $query->where('url', 'like', $search));
-            });
-        }
+        $query = $this->filteredQuery()->latest('last_seen_at');
 
         if (request('export') === 'csv') {
             return $this->exportCsv($query);
@@ -53,6 +36,72 @@ final class FindingController extends Controller
                 'remediating' => $this->visibleFindings()->where('status', 'remediating')->count(),
                 'resolved_month' => $this->visibleFindings()->where('status', 'resolved')->where('resolved_at', '>=', now()->startOfMonth())->count(),
             ],
+        ]);
+    }
+
+    public function exportXlsx(): StreamedResponse
+    {
+        $query = $this->filteredQuery();
+
+        return response()->streamDownload(function () use ($query): void {
+            $spreadsheet = new Spreadsheet();
+            $sheet = $spreadsheet->getActiveSheet();
+            $sheet->setTitle('Findings');
+            $headers = [
+                'Finding ID', 'Scan ID', 'Website', 'URL', 'Source', 'Rule key', 'Category', 'Severity',
+                'Confidence', 'Status', 'Title', 'Summary', 'Policy reference', 'Revenue impact',
+                'First seen', 'Last seen', 'Remediation',
+            ];
+            $sheet->fromArray($headers, null, 'A1');
+            $sheet->freezePane('A2');
+            $sheet->setAutoFilter('A1:Q1');
+            $sheet->getStyle('A1:Q1')->applyFromArray([
+                'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+                'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '2563EB']],
+            ]);
+
+            $row = 2;
+            $query->reorder('id')->chunkById(500, function ($findings) use ($sheet, &$row): void {
+                foreach ($findings as $finding) {
+                    $values = [
+                        $finding->public_id,
+                        (string) $finding->scan_id,
+                        $finding->website->domain,
+                        $finding->page?->url ?? $finding->website->start_url,
+                        str_starts_with($finding->rule_key, 'ai.') ? 'AI' : 'Rules',
+                        $finding->rule_key,
+                        $finding->category,
+                        $finding->severity,
+                        (string) $finding->confidence,
+                        $finding->status,
+                        $finding->title,
+                        $finding->summary,
+                        $finding->policy_reference ?? '',
+                        (string) $finding->revenue_impact,
+                        $finding->first_seen_at->toIso8601String(),
+                        $finding->last_seen_at->toIso8601String(),
+                        implode("\n", (array) $finding->remediation),
+                    ];
+                    foreach ($values as $column => $value) {
+                        $coordinate = Coordinate::stringFromColumnIndex($column + 1).$row;
+                        $sheet->setCellValueExplicit($coordinate, $value, DataType::TYPE_STRING);
+                    }
+                    $row++;
+                }
+            });
+
+            foreach (range('A', 'Q') as $column) {
+                $sheet->getColumnDimension($column)->setAutoSize($column !== 'L' && $column !== 'Q');
+            }
+            $sheet->getColumnDimension('L')->setWidth(60);
+            $sheet->getColumnDimension('Q')->setWidth(55);
+            $sheet->getStyle('A1:Q'.max(1, $row - 1))->getAlignment()->setVertical('top')->setWrapText(true);
+
+            (new Xlsx($spreadsheet))->save('php://output');
+            $spreadsheet->disconnectWorksheets();
+        }, 'maxguard-findings-'.now()->format('Y-m-d-His').'.xlsx', [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'X-Content-Type-Options' => 'nosniff',
         ]);
     }
 
@@ -107,6 +156,7 @@ final class FindingController extends Controller
             'site' => $finding->website->domain,
             'title' => $finding->title,
             'category' => $finding->category,
+            'source' => str_starts_with($finding->rule_key, 'ai.') ? 'AI' : 'Rules',
             'severity' => $finding->severity,
             'confidence' => $finding->confidence,
             'affected' => $finding->page_id ? '1 URL' : 'Site-wide',
@@ -118,6 +168,41 @@ final class FindingController extends Controller
     private function visibleFindings(): Builder
     {
         return Finding::query()->whereHas('website', fn ($query) => $query->accessibleBy(auth()->id()));
+    }
+
+    private function filteredQuery(): Builder
+    {
+        $query = Finding::query()
+            ->whereHas('website', fn ($query) => $query->accessibleBy(auth()->id()))
+            ->with(['website', 'page']);
+
+        if (request()->filled('severity')) {
+            $query->where('severity', request('severity'));
+        }
+        if (request()->filled('category')) {
+            $query->where('category', request('category'));
+        }
+        if (request()->filled('status')) {
+            $query->where('status', request('status'));
+        }
+        if (request()->filled('scan_id')) {
+            $query->where('scan_id', (int) request('scan_id'));
+        }
+        if (request()->boolean('active_scan')) {
+            $query->whereHas('scan', fn ($scan) => $scan->whereIn('status', [Scan::STATUS_QUEUED, Scan::STATUS_RUNNING]));
+        }
+        if (request()->filled('q')) {
+            $search = '%'.str_replace(['%', '_'], ['\\%', '\\_'], (string) request('q')).'%';
+            $query->where(function ($query) use ($search): void {
+                $query->where('title', 'like', $search)
+                    ->orWhere('summary', 'like', $search)
+                    ->orWhere('public_id', 'like', $search)
+                    ->orWhereHas('website', fn ($query) => $query->where('domain', 'like', $search))
+                    ->orWhereHas('page', fn ($query) => $query->where('url', 'like', $search));
+            });
+        }
+
+        return $query;
     }
 
     private function authorizeOwner(Finding $finding): void

@@ -13,10 +13,14 @@ final class StartScanRequest extends FormRequest
 
     public function rules(): array
     {
+        $safetyLimit = max(1, (int) config('maxguard.crawler.max_discovered_urls', 100_000));
+
         return [
             'site' => ['required', 'string', 'max:255'],
             'scan_type' => ['required', 'in:full,priority,copyright,ads,privacy'],
+            'max_urls' => ['nullable', 'integer', 'min:1', 'max:'.$safetyLimit],
+            'use_ai' => ['nullable', 'boolean'],
+            'force_rescan' => ['nullable', 'boolean'],
         ];
     }
 }
-

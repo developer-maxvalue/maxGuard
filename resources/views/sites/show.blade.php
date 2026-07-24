@@ -3,38 +3,47 @@
 @section('title', $site['domain'])
 
 @section('content')
-    <div class="mg-breadcrumb"><a href="{{ route('sites.index') }}">Sites</a><i class="bi bi-chevron-right"></i><span>{{ $site['domain'] }}</span></div>
+    <div class="mg-breadcrumb"><a href="{{ route('sites.index') }}">Sites</a><i
+            class="bi bi-chevron-right"></i><span>{{ $site['domain'] }}</span></div>
     <div class="mg-page-heading align-items-end">
         <div>
             <div class="d-flex align-items-center flex-wrap gap-3">
                 <h1 class="mb-0">{{ $site['domain'] }}</h1>
                 <x-status-badge :status="$site['status']" />
             </div>
-            <p class="mt-2 mb-0">Last scanned {{ $site['last_scan'] }} · {{ number_format($site['pages']) }} pages analyzed</p>
+            <p class="mt-2 mb-0">Last scanned {{ $site['last_scan'] }} · {{ number_format($site['pages']) }} pages analyzed
+            </p>
         </div>
         <div class="d-flex gap-3">
-            <a href="{{ route('findings.index', ['q' => $site['domain']]) }}" class="btn btn-light"><i class="bi bi-folder2-open me-2"></i>Open cases</a>
+            <a href="{{ route('findings.index', ['q' => $site['domain']]) }}" class="btn btn-light"><i
+                    class="bi bi-folder2-open me-2"></i>Open cases</a>
             <form method="POST" action="{{ route('scans.store') }}">
                 @csrf
                 <input type="hidden" name="site" value="{{ $site['domain'] }}">
                 <input type="hidden" name="scan_type" value="full">
-                <button class="btn btn-primary"><i class="bi bi-arrow-repeat me-2"></i>Rescan site</button>
+                @if ($aiReady)
+                    <input type="hidden" name="use_ai" value="1">
+                @endif
+                <div class="input-group">
+                    <input class="form-control form-control-solid" style="max-width: 150px" type="number" name="max_urls"
+                        min="1" max="{{ $maxUrlSafetyLimit }}" placeholder="Latest posts">
+                    <button class="btn btn-primary"><i
+                            class="bi bi-arrow-repeat me-2"></i>Rescan{{ $aiReady ? ' + AI' : '' }}</button>
+                </div>
             </form>
         </div>
     </div>
 
-    @unless ($site['verified'])
-        <div
-            class="alert alert-warning border border-warning border-opacity-25 d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-4 mb-5">
-            <div class="d-flex align-items-start gap-3"><i class="bi bi-patch-exclamation fs-2 text-warning"></i>
-                <div><strong class="d-block mb-1">Verify website ownership before scanning</strong><span class="fs-7">Create
-                        <code>/.well-known/maxguard-verification.txt</code> containing:</span><code
-                        class="d-block mt-2 user-select-all">{{ $site['verification_token'] }}</code></div>
+    @if ($site['coverage_partial'])
+        <div class="alert alert-warning d-flex align-items-start gap-3" role="alert">
+            <i class="bi bi-exclamation-triangle-fill fs-3"></i>
+            <div><strong class="d-block mb-1">The last scan had partial coverage</strong>Scanned
+                {{ number_format($site['pages']) }} of
+                {{ number_format($site['discovered_pages']) }} discovered URLs. Check the latest scan metadata, sitemap
+                errors, robots.txt and configured limits.
             </div>
-            <form method="POST" action="{{ route('sites.verify', $site['slug']) }}">@csrf<button class="btn btn-warning text-dark text-nowrap"><i
-                        class="bi bi-shield-check me-2"></i>Verify now</button></form>
         </div>
-    @endunless
+    @endif
 
     <div class="row g-5 mb-5">
         <div class="col-xl-3 col-md-6">
@@ -42,17 +51,19 @@
                 <div class="card-body p-6">
                     <div class="mg-eyebrow mb-4">Overall score</div>
                     <div class="d-flex align-items-center gap-5"><x-score-ring :score="$site['score']" />
-                        <div><strong class="mg-score-{{ $site['status'] }} d-block mb-2">{{ ucfirst($site['status']) }} exposure</strong><span
-                                class="text-muted fs-7">Prioritize the highest-confidence findings first.</span></div>
+                        <div><strong class="mg-score-{{ $site['status'] }} d-block mb-2">{{ ucfirst($site['status']) }}
+                                exposure</strong><span class="text-muted fs-7">Prioritize the highest-confidence findings
+                                first.</span></div>
                     </div>
                 </div>
             </div>
         </div>
-        <div class="col-xl-3 col-md-6"><x-metric-card label="Revenue at risk" :value="$site['revenue_risk']" note="Estimated AdSense impact" tone="danger"
-                icon="bi-currency-dollar" /></div>
-        <div class="col-xl-3 col-md-6"><x-metric-card label="Pages analyzed" :value="number_format($site['pages'])" :note="$site['coverage'] . '% crawl coverage'" tone="primary" icon="bi-file-earmark-text" /></div>
-        <div class="col-xl-3 col-md-6"><x-metric-card label="Open findings" :value="(string) $site['findings']" note="Critical issues need review" tone="warning"
-                icon="bi-exclamation-diamond" /></div>
+        <div class="col-xl-3 col-md-6"><x-metric-card label="Revenue at risk" :value="$site['revenue_risk']"
+                note="Estimated AdSense impact" tone="danger" icon="bi-currency-dollar" /></div>
+        <div class="col-xl-3 col-md-6"><x-metric-card label="Pages analyzed" :value="number_format($site['pages'])" :note="$site['coverage'] . '% of ' . number_format($site['discovered_pages']) . ' discovered URLs'"
+                tone="primary" icon="bi-file-earmark-text" /></div>
+        <div class="col-xl-3 col-md-6"><x-metric-card label="Open findings" :value="(string) $site['findings']"
+                note="Critical issues need review" tone="warning" icon="bi-exclamation-diamond" /></div>
     </div>
 
     <div class="card mg-card mb-5">
@@ -67,14 +78,18 @@
                 @foreach ($site['policies'] as $policy)
                     <div class="col-md-6 col-xxl-3">
                         <div class="mg-policy-card">
-                            <div class="d-flex justify-content-between align-items-start gap-3 mb-5"><strong>{{ $policy['name'] }}</strong><x-status-badge
-                                    :status="$policy['status']" /></div>
+                            <div class="d-flex justify-content-between align-items-start gap-3 mb-5">
+                                <strong>{{ $policy['name'] }}</strong><x-status-badge :status="$policy['status']" />
+                            </div>
                             <div class="d-flex align-items-baseline justify-content-between">
-                                <div><span class="mg-policy-score mg-score-{{ $policy['status'] }}">{{ $policy['score'] }}</span><small
-                                        class="text-muted">/100</small></div><span class="text-muted fs-7">{{ $policy['count'] }}</span>
+                                <div><span
+                                        class="mg-policy-score mg-score-{{ $policy['status'] }}">{{ $policy['score'] }}</span><small
+                                        class="text-muted">/100</small></div><span
+                                    class="text-muted fs-7">{{ $policy['count'] }}</span>
                             </div>
                             <div class="progress h-6px mt-4">
-                                <div class="progress-bar mg-progress-{{ $policy['status'] }}" style="width: {{ $policy['score'] }}%"></div>
+                                <div class="progress-bar mg-progress-{{ $policy['status'] }}"
+                                    style="width: {{ $policy['score'] }}%"></div>
                             </div>
                         </div>
                     </div>
@@ -89,7 +104,8 @@
                 <h2 class="mg-card-title">Highest-risk URLs</h2>
                 <p class="mg-card-subtitle">Start with pages most likely to cause account-level enforcement.</p>
             </div>
-            <div class="card-toolbar"><a href="{{ route('findings.index') }}" class="btn btn-light-primary btn-sm">View all findings</a></div>
+            <div class="card-toolbar"><a href="{{ route('findings.index') }}" class="btn btn-light-primary btn-sm">View all
+                    findings</a></div>
         </div>
         <div class="card-body pt-0">
             <div class="table-responsive">
@@ -106,11 +122,13 @@
                     <tbody>
                         @foreach ($site['risky_urls'] as $url)
                             <tr>
-                                <td class="mw-350px"><span class="d-block text-truncate fw-semibold">{{ $url['path'] }}</span></td>
+                                <td class="mw-350px"><span
+                                        class="d-block text-truncate fw-semibold">{{ $url['path'] }}</span></td>
                                 <td class="text-gray-700">{{ $url['issue'] }}</td>
                                 <td><x-status-badge :status="$url['severity']" /></td>
                                 <td><strong>{{ $url['evidence'] }} items</strong></td>
-                                <td class="text-end"><a href="{{ route('findings.show', $url['finding_id']) }}" class="btn btn-sm btn-light-primary">View
+                                <td class="text-end"><a href="{{ route('findings.show', $url['finding_id']) }}"
+                                        class="btn btn-sm btn-light-primary">View
                                         evidence</a></td>
                             </tr>
                         @endforeach

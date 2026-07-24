@@ -14,6 +14,7 @@ Laravel Horizon Workers
     ├── URL discovery + safe HTTP fetch
     ├── HTML inspection
     ├── Policy detectors
+    ├── OpenAI semantic policy analysis
     └── Evidence packaging ── S3-compatible object storage
 ```
 
@@ -26,13 +27,14 @@ Phần HTML crawler, detector, queue và evidence đã có trong gói. Browser r
 - `id`, `user_id`, `domain`, `start_url`.
 - `status`, `overall_score`, `last_scanned_at`.
 - `expected_monthly_revenue`, `pages_count`, `open_findings_count`.
-- `ownership_verified_at`, `settings` JSON.
+- `settings` JSON cho cấu hình crawl theo website.
 
 ### `scans`
 
-- `id`, `website_id`, `type`, `status`, `progress`.
+- `id`, `website_id`, `type`, `status`, `progress`, `max_urls`.
 - `requested_by`, `started_at`, `finished_at`.
-- `pages_discovered`, `pages_scanned`, `risk_score`.
+- `pages_discovered`, `pages_scanned`, `pages_skipped_unchanged`, `current_url`, `risk_score`.
+- `use_ai`, `force_rescan`, `ai_pages_analyzed`, `ai_findings_count`.
 - `ruleset_version`, `error_message`, `meta` JSON.
 
 ### `pages`
@@ -78,6 +80,35 @@ Mỗi detector trả về `DetectorResult`; `RiskScoreCalculator` tổng hợp s
 
 Lưu `ruleset_version` theo từng scan để audit kết quả về sau. Khi thay logic detector, tăng version này trong `ScanDispatcher`.
 
+## 3.1. AI policy analyzer
+
+`AiPolicyAnalyzer` là lớp semantic review sau deterministic detector. Mỗi page request dùng OpenAI Responses API, `store=false` và Structured Outputs với schema strict. Model chỉ được chọn một số `policy_code` cố định; category và policy reference được map lại phía server, không tin trực tiếp chuỗi model tạo ra.
+
+Các guardrail chính:
+
+- Chỉ chạy khi scan có `use_ai=true` và server có key.
+- Page text bị truncate theo `MAXGUARD_AI_MAX_INPUT_CHARS`.
+- Prompt coi toàn bộ nội dung website là untrusted data và cấm làm theo instruction trong bài.
+- Findings dưới `MAXGUARD_AI_MIN_CONFIDENCE` bị loại.
+- AI error không làm hỏng deterministic scan.
+- Rules-only scan không resolve finding `ai.*`.
+- AI finding cũ chỉ được resolve khi đúng URL đã được AI phân tích lại thành công.
+- `MAXGUARD_AI_MAX_PAGES_PER_SCAN` giới hạn chi phí và latency.
+
+## 3.2. Incremental analysis cache
+
+`pages.content_hash` là SHA-256 của text đã normalize. Sau một lần phân tích thành công, `pages.meta.maxguard_analysis` lưu `ruleset_version`, `scan_type`, trạng thái AI, AI model và thời điểm phân tích. Scan sau chỉ tái sử dụng khi hash và toàn bộ coverage yêu cầu tương thích.
+
+Luồng cache an toàn:
+
+1. Fetch trang và tính content hash mới.
+2. Nếu hash/coverage không tương thích hoặc `force_rescan=true`, chạy detector và AI bình thường.
+3. Nếu tương thích, chỉ cập nhật crawl metadata/`last_scan_id`, warm fingerprint cho duplicate comparison và bỏ qua detector, AI, snapshot, evidence.
+4. Không đưa page được tái sử dụng vào tập auto-resolve; finding cũ vì vậy không bị resolve nhầm.
+5. Chỉ ghi analysis marker sau khi detector/evidence/finding persistence hoàn tất.
+
+Cơ chế này tiết kiệm phần tốn CPU/chi phí nhất nhưng vẫn phát hiện bài viết bị sửa trên cùng URL. Một hệ thống chỉ kiểm tra “URL đã từng tồn tại” rồi bỏ qua vĩnh viễn là không an toàn cho compliance monitoring.
+
 ## 4. Copyright và duplicate content
 
 Backend hiện có internal near-duplicate và media provenance signals. Để nâng cấp thành hệ thống copyright chuyên sâu, bổ sung:
@@ -91,10 +122,12 @@ Không tự động kết luận “vi phạm bản quyền” chỉ từ simila
 
 ## 5. Queue và giới hạn tài nguyên
 
-MVP dùng queue `scans` với job `RunWebsiteScan`. Khi tải lớn, tách queue theo workload:
+Pipeline hiện tại đã tách theo workload:
 
-- `scans`: orchestration.
-- `fetch`: HTTP I/O.
+- `scans`: discovery/orchestration.
+- `scan-pages`: HTTP, rules, AI và evidence theo batch nhỏ.
+- `scan-finalize`: duplicate comparison toàn sample, resolve finding và risk score.
+- `fetch`: queue mở rộng nếu sau này tách HTTP khỏi page analyzer.
 - `render`: Playwright, RAM/CPU cao.
 - `detectors`: NLP/image similarity.
 - `evidence`: nén, hash, upload.
@@ -104,7 +137,7 @@ Cấu hình Horizon supervisor riêng cho `render`, giới hạn số process đ
 
 - Idempotency key.
 - Timeout và retry có backoff.
-- Distributed lock theo scan/page.
+    - Distributed lock/claim token theo scan/page.
 - Dead-letter/failed job alert.
 - Rate limit theo host và workspace.
 
@@ -131,23 +164,63 @@ Các role gợi ý:
 
 ## 8. Cấu hình môi trường
 
+Cấu hình dễ triển khai trên một máy chủ Laravel thông thường:
+
 ```dotenv
 APP_ENV=production
 APP_DEBUG=false
-QUEUE_CONNECTION=redis
-CACHE_DRIVER=redis
-SESSION_DRIVER=redis
+QUEUE_CONNECTION=database
+DB_QUEUE_RETRY_AFTER=2400
+CACHE_DRIVER=file
+SESSION_DRIVER=file
 
 MAXGUARD_EVIDENCE_DISK=s3
 MAXGUARD_QUEUE=scans
-MAXGUARD_MAX_PAGES=100
+MAXGUARD_PAGE_QUEUE=scan-pages
+MAXGUARD_FINALIZE_QUEUE=scan-finalize
+MAXGUARD_PAGE_BATCH_SIZE=10
+MAXGUARD_PAGE_WORKERS=6
+MAXGUARD_ORCHESTRATOR_TIMEOUT=900
+MAXGUARD_PAGE_JOB_TIMEOUT=1800
+MAXGUARD_FINALIZE_TIMEOUT=900
+MAXGUARD_MAX_PAGES=0
+MAXGUARD_MAX_DISCOVERED_URLS=100000
+MAXGUARD_MAX_SITEMAPS=1000
+MAXGUARD_WORKER_MEMORY=1024
 MAXGUARD_HOST_RPS=1.5
+OPENAI_API_KEY=project-key
+MAXGUARD_AI_ENABLED=true
+MAXGUARD_AI_MODEL=gpt-5.6-terra
+MAXGUARD_AI_MAX_PAGES_PER_SCAN=100
 AWS_BUCKET=maxguard-evidence
 AWS_USE_PATH_STYLE_ENDPOINT=false
 
 MAXGUARD_ROUTE_MIDDLEWARE=auth
 MAXGUARD_PROVIDE_AUTH_ROUTES=true
 ```
+
+Tạo bảng và kiểm tra queue:
+
+```bash
+php artisan migrate
+php artisan maxguard:queue-doctor
+php artisan queue:work database --queue=scans,scan-finalize --sleep=2 --tries=3 --timeout=900 --memory=1024
+php artisan queue:work database --queue=scan-pages --sleep=1 --tries=2 --timeout=1800 --memory=1024
+```
+
+Nếu doctor báo thiếu bảng `jobs` và codebase chưa có migration tạo bảng này, chạy `php artisan queue:table && php artisan migrate` rồi kiểm tra lại.
+
+Với database queue, đặt `retry_after` trong `config/queue.php` lớn hơn job timeout để job dài không bị reserve lần hai:
+
+```php
+'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 2400),
+```
+
+Crawler đọc sitemap được khai báo trong robots.txt và các endpoint phổ biến, phân biệt `sitemapindex`/`urlset`, đi đệ quy qua sitemap con rồi bổ sung internal links. `MAXGUARD_MAX_PAGES=0` quét toàn bộ URL phát hiện trong safety cap. Scan thiếu coverage được lưu là `partial`.
+
+Khi scan truyền `max_urls`, crawler chuyển sang fixed sitemap sample: đọc toàn bộ sitemap metadata trước, ưu tiên URL từ `post-sitemap*.xml`, sort theo `<lastmod>` giảm dần và chọn đúng N bài. Internal links không được phép mở rộng fixed sample. Chạm giới hạn do người dùng yêu cầu không phải discovery truncation; scan đủ N URL được ghi `completed` kèm `is_sampled=true`. Safety cap, sitemap error, robots block hoặc selected URL failure vẫn tạo `partial`.
+
+Khi có Redis/Horizon production, đổi `QUEUE_CONNECTION=redis`, `CACHE_DRIVER=redis`, `SESSION_DRIVER=redis`; cấu hình một process cho `scans,scan-finalize` và nhiều process cho `scan-pages`. File Supervisor mẫu nằm tại `docs/supervisor-maxguard.conf.example`.
 
 ## 9. Scheduler
 
@@ -186,7 +259,8 @@ Health checks cần bao phủ HTTP app, database, Redis, object storage, rendere
 
 - Website CRUD cơ bản, manual/scheduled scan.
 - Safe HTML crawler, policy detectors cơ bản.
-- Database, queue, dashboard, findings và private evidence download.
+- Database, queue, dashboard, live findings report, Excel export và private evidence download.
+- Semantic AI review tùy chọn, per-scan URL cap và live scanned/discovered/current URL progress.
 
 ### Bổ sung trước khi bán SaaS đa tenant
 

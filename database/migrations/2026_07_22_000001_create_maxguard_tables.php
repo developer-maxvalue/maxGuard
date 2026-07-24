@@ -20,7 +20,6 @@ return new class extends Migration
             $table->decimal('expected_monthly_revenue', 12, 2)->default(0);
             $table->unsignedInteger('pages_count')->default(0);
             $table->unsignedInteger('open_findings_count')->default(0);
-            $table->timestamp('ownership_verified_at')->nullable();
             $table->timestamp('last_scanned_at')->nullable()->index();
             $table->timestamp('next_scan_at')->nullable()->index();
             $table->json('settings')->nullable();
@@ -122,4 +121,3 @@ return new class extends Migration
         Schema::dropIfExists('websites');
     }
 };
-

@@ -8,12 +8,18 @@
             <h1>Portfolio overview</h1>
             <p>See risk, revenue exposure and remediation priorities across every site.</p>
         </div>
-        <form method="POST" action="{{ route('scans.store') }}">
+        <form method="POST" action="{{ route('scans.store') }}" class="d-flex align-items-center gap-2 flex-wrap">
             @csrf
             <input type="hidden" name="site" value="all-sites">
             <input type="hidden" name="scan_type" value="full">
+            @if ($aiReady)
+                <input type="hidden" name="use_ai" value="1">
+            @endif
+            <label class="visually-hidden" for="dashboard-max-urls">Maximum newest posts per site</label>
+            <input id="dashboard-max-urls" class="form-control form-control-solid" style="width: 170px" type="number"
+                name="max_urls" min="1" max="{{ $maxUrlSafetyLimit }}" placeholder="Latest posts / site">
             <button class="btn btn-primary px-5" type="submit">
-                <i class="bi bi-upc-scan me-2"></i>Run full scan
+                <i class="bi bi-upc-scan me-2"></i>Run full scan{{ $aiReady ? ' + AI' : '' }}
             </button>
         </form>
     </div>
@@ -54,14 +60,19 @@
                 </div>
                 <div class="card-body pt-2">
                     <div class="mg-health-grid">
-                        <div class="mg-health-donut" style="--healthy: {{ $health['healthy_percent'] }}; --review: {{ $health['review_percent'] }}" role="img"
+                        <div class="mg-health-donut"
+                            style="--healthy: {{ $health['healthy_percent'] }}; --review: {{ $health['review_percent'] }}"
+                            role="img"
                             aria-label="{{ $health['healthy'] }} healthy, {{ $health['review'] }} need review, {{ $health['critical'] }} critical">
                             <div><strong>{{ $health['total'] }}</strong><small>sites</small></div>
                         </div>
                         <div class="mg-health-legend">
-                            <div><span class="bg-success"></span><em>Healthy</em><strong>{{ $health['healthy'] }}</strong></div>
-                            <div><span class="bg-warning"></span><em>Needs review</em><strong>{{ $health['review'] }}</strong></div>
-                            <div><span class="bg-danger"></span><em>Critical</em><strong>{{ $health['critical'] }}</strong></div>
+                            <div><span class="bg-success"></span><em>Healthy</em><strong>{{ $health['healthy'] }}</strong>
+                            </div>
+                            <div><span class="bg-warning"></span><em>Needs
+                                    review</em><strong>{{ $health['review'] }}</strong></div>
+                            <div><span class="bg-danger"></span><em>Critical</em><strong>{{ $health['critical'] }}</strong>
+                            </div>
                         </div>
                     </div>
                     <a href="{{ route('sites.index') }}" class="btn btn-light-primary w-100 mt-5">View all sites</a>
@@ -102,7 +113,9 @@
                                         <strong>{{ $site['domain'] }}</strong>
                                     </a>
                                 </td>
-                                <td><strong class="mg-score-text mg-score-{{ $site['status'] }}">{{ $site['score'] }}</strong></td>
+                                <td><strong
+                                        class="mg-score-text mg-score-{{ $site['status'] }}">{{ $site['score'] }}</strong>
+                                </td>
                                 <td class="text-gray-700">{{ $site['top_risk'] }}</td>
                                 <td><strong>{{ $site['findings'] }}</strong></td>
                                 <td class="text-muted">{{ $site['last_scan'] }}</td>
@@ -120,7 +133,9 @@
     <script>
         window.MaxGuardPage = {
             trend: @json($trend),
-            trendLabels: ['May 6', '', 'May 20', '', 'Jun 3', '', 'Jun 17', '', 'Jul 1', '', 'Jul 15', '', 'Jul 29', '', 'Aug 12', 'Now']
+            trendLabels: ['May 6', '', 'May 20', '', 'Jun 3', '', 'Jun 17', '', 'Jul 1', '', 'Jul 15', '', 'Jul 29', '',
+                'Aug 12', 'Now'
+            ]
         };
     </script>
 @endpush

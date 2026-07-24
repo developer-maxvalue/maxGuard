@@ -20,15 +20,17 @@ final class RunWebsiteScan implements ShouldQueue, ShouldBeUnique
     use Queueable;
     use SerializesModels;
 
-    public int $timeout = 1800;
+    public int $timeout;
     public int $tries = 3;
-    public int $uniqueFor = 3600;
+    public int $uniqueFor;
 
     /** @var list<int> */
     public array $backoff = [60, 300, 900];
 
     public function __construct(public Scan $scan)
     {
+        $this->timeout = max(120, (int) config('maxguard.orchestrator_timeout_seconds', 900));
+        $this->uniqueFor = $this->timeout + 600;
     }
 
     public function uniqueId(): string
@@ -38,13 +40,13 @@ final class RunWebsiteScan implements ShouldQueue, ShouldBeUnique
 
     public function handle(ScanRunner $runner): void
     {
-        $runner->run($this->scan);
+        $runner->dispatchParallel($this->scan);
     }
 
     public function failed(Throwable $exception): void
     {
         $this->scan->refresh();
-        if ($this->scan->status !== Scan::STATUS_COMPLETED) {
+        if (! in_array($this->scan->status, [Scan::STATUS_COMPLETED, Scan::STATUS_CANCELLED], true)) {
             $this->scan->update([
                 'status' => Scan::STATUS_FAILED,
                 'finished_at' => now(),

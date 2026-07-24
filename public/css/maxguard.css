@@ -267,6 +267,11 @@ body.mg-auth-body {
 .mg-check-list { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
 .mg-check-list li { display: flex; align-items: center; gap: 10px; color: #475569; font-size: 11px; }
 .mg-check-list i { display: grid; width: 22px; height: 22px; place-items: center; border-radius: 50%; background: #dcfce7; color: #15803d; }
+.mg-pulse-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #16a34a; box-shadow: 0 0 0 4px rgba(22, 163, 74, .12); animation: mg-live-pulse 1.8s ease-in-out infinite; }
+
+@keyframes mg-live-pulse {
+    50% { opacity: .35; transform: scale(.8); }
+}
 
 .mg-sidebar-backdrop { position: fixed; inset: 0; z-index: 1030; display: none; background: rgba(15, 23, 42, .55); backdrop-filter: blur(2px); }
 

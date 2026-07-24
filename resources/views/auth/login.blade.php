@@ -28,7 +28,8 @@
                 <div class="mg-auth-message">
                     <span class="mg-auth-kicker"><i class="bi bi-shield-check"></i> Compliance command center</span>
                     <h1>Protect every website before policy risk becomes revenue loss.</h1>
-                    <p>Monitor content quality, copyright signals, duplicate pages, ad experience, privacy and technical trust from one workspace.</p>
+                    <p>Monitor content quality, copyright signals, duplicate pages, ad experience, privacy and technical
+                        trust from one workspace.</p>
                 </div>
             </div>
 
@@ -59,8 +60,9 @@
 
                     <div>
                         <label class="form-label" for="email">Email address</label>
-                        <input id="email" class="form-control form-control-lg @error('email') is-invalid @enderror" type="email" name="email"
-                            value="{{ old('email') }}" required autofocus autocomplete="username" placeholder="admin@example.com">
+                        <input id="email" class="form-control form-control-lg @error('email') is-invalid @enderror"
+                            type="email" name="email" value="{{ old('email') }}" required autofocus
+                            autocomplete="username" placeholder="admin@example.com">
                         @error('email')
                             <div class="invalid-feedback">{{ $message }}</div>
                         @enderror
@@ -68,15 +70,17 @@
 
                     <div>
                         <label class="form-label" for="password">Password</label>
-                        <input id="password" class="form-control form-control-lg @error('password') is-invalid @enderror" type="password" name="password"
-                            required autocomplete="current-password" placeholder="Enter your password">
+                        <input id="password"
+                            class="form-control form-control-lg @error('password') is-invalid @enderror" type="password"
+                            name="password" required autocomplete="current-password" placeholder="Enter your password">
                         @error('password')
                             <div class="invalid-feedback">{{ $message }}</div>
                         @enderror
                     </div>
 
                     <label class="form-check form-check-custom form-check-solid">
-                        <input class="form-check-input" type="checkbox" name="remember" value="1" @checked(old('remember'))>
+                        <input class="form-check-input" type="checkbox" name="remember" value="1"
+                            @checked(old('remember'))>
                         <span class="form-check-label">Keep me signed in on this device</span>
                     </label>
 
@@ -85,7 +89,8 @@
                     </button>
                 </form>
 
-                <p class="mg-auth-help"><i class="bi bi-info-circle"></i> No account yet? Run <code>php artisan maxguard:create-admin</code> on the server.</p>
+                <p class="mg-auth-help"><i class="bi bi-info-circle"></i> No account yet? Run <code>php artisan
+                        maxguard:create-admin</code> on the server.</p>
             </div>
         </section>
     </main>

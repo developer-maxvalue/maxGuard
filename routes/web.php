@@ -29,13 +29,14 @@ Route::middleware(config('maxguard.route_middleware', ['auth']))->group(function
     Route::get('/sites', [SiteController::class, 'index'])->name('sites.index');
     Route::post('/sites', [SiteController::class, 'store'])->name('sites.store');
     Route::get('/sites/{site}', [SiteController::class, 'show'])->name('sites.show');
-    Route::post('/sites/{site}/verify', [SiteController::class, 'verify'])->name('sites.verify');
 
     Route::get('/findings', [FindingController::class, 'index'])->name('findings.index');
+    Route::get('/findings/export/xlsx', [FindingController::class, 'exportXlsx'])->name('findings.export.xlsx');
     Route::get('/findings/{finding}', [FindingController::class, 'show'])->name('findings.show');
     Route::patch('/findings/{finding}', [FindingController::class, 'update'])->name('findings.update');
     Route::get('/evidence/{evidence}/download', [EvidenceController::class, 'download'])->name('evidence.download');
 
     Route::get('/scan-center', [ScanController::class, 'index'])->name('scans.index');
+    Route::get('/scan-center/live', [ScanController::class, 'live'])->name('scans.live');
     Route::post('/scan-center', [ScanController::class, 'store'])->name('scans.store');
 });

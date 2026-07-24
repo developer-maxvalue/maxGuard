@@ -46,6 +46,8 @@ final class DashboardController extends Controller
             'sites' => $websites->map(fn (Website $website): array => $this->siteRow($website))->all(),
             'trend' => $trend === [] ? [100] : $trend,
             'health' => $health,
+            'aiReady' => (bool) config('maxguard.ai.enabled') && filled(config('maxguard.ai.api_key')),
+            'maxUrlSafetyLimit' => max(1, (int) config('maxguard.crawler.max_discovered_urls', 100_000)),
         ]);
     }
 

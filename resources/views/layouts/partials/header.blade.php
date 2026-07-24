@@ -13,7 +13,8 @@
     </div>
 
     <div class="d-flex align-items-center gap-3">
-        <a class="btn btn-icon btn-light position-relative" href="{{ route('findings.index', ['severity' => 'critical']) }}" aria-label="Critical findings">
+        <a class="btn btn-icon btn-light position-relative"
+            href="{{ route('findings.index', ['severity' => 'critical']) }}" aria-label="Critical findings">
             <i class="bi bi-bell fs-4"></i>
             <span class="mg-notification-dot"></span>
         </a>
@@ -42,7 +43,8 @@
                 <div class="dropdown-divider"></div>
                 <form method="POST" action="{{ route('logout') }}">
                     @csrf
-                    <button class="dropdown-item" type="submit"><i class="bi bi-box-arrow-right me-2"></i>Sign out</button>
+                    <button class="dropdown-item" type="submit"><i class="bi bi-box-arrow-right me-2"></i>Sign
+                        out</button>
                 </form>
             @endif
         </div>

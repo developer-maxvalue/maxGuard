@@ -7,11 +7,12 @@ use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
-final class SafeHttpClient
+class SafeHttpClient
 {
     public function __construct(
         private SafeUrlValidator $validator,
         private UrlNormalizer $urls,
+        private HostRateLimiter $rateLimiter,
     ) {
     }
 
@@ -22,6 +23,7 @@ final class SafeHttpClient
 
         for ($redirect = 0; $redirect <= $maxRedirects; $redirect++) {
             $ips = $this->validator->publicIps($current);
+            $this->rateLimiter->throttle($current);
             $response = $this->request($current, $ips[0], $accept);
 
             if ($response->redirect()) {

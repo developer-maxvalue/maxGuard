@@ -7,6 +7,9 @@ final class RobotsPolicy
     /** @var list<string> */
     private array $disallowed = [];
 
+    /** @var list<string> */
+    private array $sitemaps = [];
+
     public static function fromText(string $robots): self
     {
         $policy = new self();
@@ -20,6 +23,11 @@ final class RobotsPolicy
 
             [$field, $value] = array_map('trim', explode(':', $line, 2));
             $field = strtolower($field);
+
+            if ($field === 'sitemap' && filter_var($value, FILTER_VALIDATE_URL)) {
+                $policy->sitemaps[] = $value;
+                continue;
+            }
 
             if ($field === 'user-agent') {
                 $applies = $value === '*' || str_contains(strtolower($value), 'maxguard');
@@ -47,5 +55,10 @@ final class RobotsPolicy
 
         return true;
     }
-}
 
+    /** @return list<string> */
+    public function sitemaps(): array
+    {
+        return array_values(array_unique($this->sitemaps));
+    }
+}

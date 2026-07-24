@@ -8,12 +8,21 @@ use App\Data\PageDocument;
 
 final class DuplicateContentDetector implements Detector
 {
-    /** @var list<array{url: string, shingles: array<string, true>}> */
+    /** @var list<array{url: string, sketch: array<string, true>}> */
     private array $seen = [];
+
+    /** @var array<string, list<int>> */
+    private array $candidateIndex = [];
 
     public function key(): string
     {
         return 'duplicate-content';
+    }
+
+    public function reset(): void
+    {
+        $this->seen = [];
+        $this->candidateIndex = [];
     }
 
     public function detect(PageDocument $page): array
@@ -22,19 +31,40 @@ final class DuplicateContentDetector implements Detector
             return [];
         }
 
-        $shingles = $this->shingles($page->normalizedText());
+        return $this->detectSketch($page->url, $this->sketchFor($page));
+    }
+
+    /** @return array<string, true> */
+    public function sketchFor(PageDocument $page): array
+    {
+        if ($page->wordCount < 150) {
+            return [];
+        }
+
+        return $this->sketch($page->normalizedText());
+    }
+
+    /** @param array<string, true> $sketch @return list<DetectorResult> */
+    public function detectSketch(string $url, array $sketch): array
+    {
+        if ($sketch === []) {
+            return [];
+        }
+
+        $candidates = $this->candidates($sketch);
         $best = 0.0;
         $matchedUrl = null;
 
-        foreach ($this->seen as $candidate) {
-            $score = $this->jaccard($shingles, $candidate['shingles']);
+        foreach ($candidates as $index) {
+            $candidate = $this->seen[$index];
+            $score = $this->jaccard($sketch, $candidate['sketch']);
             if ($score > $best) {
                 $best = $score;
                 $matchedUrl = $candidate['url'];
             }
         }
 
-        $this->seen[] = ['url' => $page->url, 'shingles' => $shingles];
+        $this->remember($url, $sketch);
         $threshold = (float) config('maxguard.thresholds.duplicate_similarity', 0.86);
         if ($matchedUrl === null || $best < $threshold) {
             return [];
@@ -48,9 +78,9 @@ final class DuplicateContentDetector implements Detector
             severity: $best >= 0.95 ? 'high' : 'review',
             confidence: $percent,
             title: 'Substantial internal content similarity',
-            summary: "This page shares approximately {$percent}% of its four-word shingles with another page on the same site.",
+            summary: "This page has an estimated {$percent}% four-word shingle similarity with another page on the same site.",
             policyReference: 'Google Publisher Policies — low-value/reused inventory review',
-            signals: ['similarity' => $percent, 'matched_url' => $matchedUrl, 'method' => '4-word Jaccard shingles'],
+            signals: ['similarity' => $percent, 'matched_url' => $matchedUrl, 'method' => 'bottom-k sketch of 4-word shingles'],
             remediation: [
                 'Consolidate equivalent pages and use a canonical URL where appropriate.',
                 'Add distinct original value rather than changing only the headline or introduction.',
@@ -61,16 +91,52 @@ final class DuplicateContentDetector implements Detector
     }
 
     /** @return array<string, true> */
-    private function shingles(string $text): array
+    private function sketch(string $text): array
     {
         $words = preg_split('/\s+/u', $text) ?: [];
-        $set = [];
-        $limit = min(count($words) - 3, 1500);
+        $hashes = [];
+        $limit = min(max(0, count($words) - 3), 3000);
         for ($index = 0; $index < $limit; $index++) {
-            $set[implode(' ', array_slice($words, $index, 4))] = true;
+            $shingle = implode(' ', array_slice($words, $index, 4));
+            $hashes[substr(hash('sha1', $shingle), 0, 16)] = true;
         }
 
-        return $set;
+        ksort($hashes, SORT_STRING);
+        $size = max(32, (int) config('maxguard.thresholds.duplicate_sketch_size', 128));
+
+        return array_slice($hashes, 0, $size, true);
+    }
+
+    /** @param array<string, true> $sketch @return list<int> */
+    private function candidates(array $sketch): array
+    {
+        $counts = [];
+        foreach ($sketch as $hash => $_) {
+            foreach ($this->candidateIndex[$hash] ?? [] as $index) {
+                $counts[$index] = ($counts[$index] ?? 0) + 1;
+            }
+        }
+
+        arsort($counts, SORT_NUMERIC);
+        $limit = max(1, (int) config('maxguard.thresholds.duplicate_candidate_limit', 30));
+
+        return array_map('intval', array_slice(array_keys($counts), 0, $limit));
+    }
+
+    /** @param array<string, true> $sketch */
+    private function remember(string $url, array $sketch): void
+    {
+        $index = count($this->seen);
+        $this->seen[] = ['url' => $url, 'sketch' => $sketch];
+        $bucketLimit = max(10, (int) config('maxguard.thresholds.duplicate_bucket_limit', 200));
+
+        foreach ($sketch as $hash => $_) {
+            $this->candidateIndex[$hash] ??= [];
+            $this->candidateIndex[$hash][] = $index;
+            if (count($this->candidateIndex[$hash]) > $bucketLimit) {
+                array_shift($this->candidateIndex[$hash]);
+            }
+        }
     }
 
     /** @param array<string, true> $first @param array<string, true> $second */
@@ -86,4 +152,3 @@ final class DuplicateContentDetector implements Detector
         return $union === 0 ? 0.0 : $intersection / $union;
     }
 }
-

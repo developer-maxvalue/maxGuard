@@ -22,8 +22,10 @@ final class Website extends Model
         'overall_score',
         'expected_monthly_revenue',
         'pages_count',
+        'last_discovered_pages',
+        'last_scanned_pages',
+        'last_scan_partial',
         'open_findings_count',
-        'ownership_verified_at',
         'last_scanned_at',
         'next_scan_at',
         'settings',
@@ -32,7 +34,7 @@ final class Website extends Model
     protected $casts = [
         'expected_monthly_revenue' => 'decimal:2',
         'settings' => 'array',
-        'ownership_verified_at' => 'datetime',
+        'last_scan_partial' => 'boolean',
         'last_scanned_at' => 'datetime',
         'next_scan_at' => 'datetime',
     ];

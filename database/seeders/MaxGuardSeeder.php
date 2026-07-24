@@ -33,9 +33,11 @@ final class MaxGuardSeeder extends Seeder
                 'overall_score' => $data['score'],
                 'expected_monthly_revenue' => $data['revenue'],
                 'pages_count' => $data['pages'],
+                'last_discovered_pages' => $data['pages'],
+                'last_scanned_pages' => $data['pages'],
+                'last_scan_partial' => false,
                 'last_scanned_at' => now()->subMinutes(8 + ($index * 42)),
                 'next_scan_at' => now()->addHours(6 + $index),
-                'ownership_verified_at' => now()->subDays(30),
             ]);
 
             $scan = Scan::query()->updateOrCreate([
@@ -45,8 +47,8 @@ final class MaxGuardSeeder extends Seeder
                 'type' => 'full',
                 'status' => Scan::STATUS_COMPLETED,
                 'progress' => 100,
-                'pages_discovered' => min($data['pages'], 100),
-                'pages_scanned' => min($data['pages'], 100),
+                'pages_discovered' => $data['pages'],
+                'pages_scanned' => $data['pages'],
                 'score' => $data['score'],
                 'started_at' => now()->subMinutes(25 + ($index * 42)),
                 'finished_at' => now()->subMinutes(8 + ($index * 42)),
@@ -92,7 +94,7 @@ final class MaxGuardSeeder extends Seeder
                     'summary' => $findingData['summary'],
                     'policy_reference' => $findingData['policy'],
                     'signals' => ['demo_evidence' => true, 'manual_review_required' => true],
-                    'remediation' => ['Review the evidence.', 'Verify rights or remove the affected material.', 'Run a verification scan.'],
+                    'remediation' => ['Review the evidence.', 'Verify rights or remove the affected material.', 'Run a follow-up scan.'],
                     'first_seen_at' => $scan->finished_at,
                     'last_seen_at' => $scan->finished_at,
                 ]);

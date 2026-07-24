@@ -1,0 +1,27 @@
+[program:maxguard-control]
+process_name=%(program_name)s
+command=php /var/www/maxguard/artisan queue:work database --queue=scans,scan-finalize --sleep=2 --tries=3 --timeout=900 --memory=1024
+directory=/var/www/maxguard
+autostart=true
+autorestart=true
+stopasgroup=true
+killasgroup=true
+user=www-data
+numprocs=1
+redirect_stderr=true
+stdout_logfile=/var/www/maxguard/storage/logs/worker-control.log
+stopwaitsecs=930
+
+[program:maxguard-pages]
+process_name=%(program_name)s_%(process_num)02d
+command=php /var/www/maxguard/artisan queue:work database --queue=scan-pages --sleep=1 --tries=2 --timeout=1800 --memory=1024
+directory=/var/www/maxguard
+autostart=true
+autorestart=true
+stopasgroup=true
+killasgroup=true
+user=www-data
+numprocs=6
+redirect_stderr=true
+stdout_logfile=/var/www/maxguard/storage/logs/worker-pages.log
+stopwaitsecs=1830

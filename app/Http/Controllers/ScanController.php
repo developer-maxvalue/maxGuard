@@ -3,10 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\StartScanRequest;
+use App\Models\Finding;
 use App\Models\Scan;
+use App\Models\ScanTarget;
 use App\Models\Website;
 use App\Services\ScanDispatcher;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\JsonResponse;
 use Illuminate\View\View;
 
 final class ScanController extends Controller
@@ -16,14 +19,69 @@ final class ScanController extends Controller
         $visibleScans = Scan::query()->whereHas('website', fn ($query) => $query->accessibleBy(auth()->id()));
         $running = (clone $visibleScans)->where('status', Scan::STATUS_RUNNING)->count();
         $queued = (clone $visibleScans)->where('status', Scan::STATUS_QUEUED)->count();
+        $targetQuery = ScanTarget::query()->whereHas(
+            'scan.website',
+            fn ($query) => $query->accessibleBy(auth()->id())
+        );
+        $runningTargets = (clone $targetQuery)->where('status', ScanTarget::STATUS_RUNNING)->count();
+        $queuedTargets = (clone $targetQuery)->where('status', ScanTarget::STATUS_QUEUED)->count();
+        $pageWorkers = max(1, (int) config('maxguard.recommended_page_workers', 6));
+        $batchSize = max(1, min(100, (int) config('maxguard.page_batch_size', 10)));
+        $connection = (string) config('queue.default', 'sync');
+        $controlTimeout = max(
+            120,
+            (int) config('maxguard.orchestrator_timeout_seconds', 900),
+            (int) config('maxguard.finalize_timeout_seconds', 900),
+        );
+        $pageTimeout = max(120, (int) config('maxguard.page_job_timeout_seconds', 1800));
 
         return view('scans.index', [
             'sites' => Website::query()->accessibleBy(auth()->id())->orderBy('domain')->get()->map(fn (Website $website): array => [
                 'domain' => $website->domain,
                 'slug' => $website->slug,
             ])->all(),
-            'recentScans' => Scan::query()->whereHas('website', fn ($query) => $query->accessibleBy(auth()->id()))->with('website')->latest()->limit(10)->get(),
-            'scanStats' => ['running' => $running, 'queued' => $queued, 'utilization' => min(100, ($running * 35) + ($queued * 10))],
+            'recentScans' => $this->recentScans(),
+            'liveFindings' => $this->liveFindings(),
+            'scanStats' => [
+                'running' => $running,
+                'queued' => $queued,
+                'target_running' => $runningTargets,
+                'target_queued' => $queuedTargets,
+                'page_workers' => $pageWorkers,
+                'batch_size' => $batchSize,
+                'utilization' => min(100, (int) round(($runningTargets / max(1, $pageWorkers * $batchSize)) * 100)),
+            ],
+            'aiInfo' => [
+                'ready' => (bool) config('maxguard.ai.enabled') && filled(config('maxguard.ai.api_key')),
+                'model' => (string) config('maxguard.ai.model', 'gpt-5.6-terra'),
+                'page_limit' => (int) config('maxguard.ai.max_pages_per_scan', 100),
+            ],
+            'maxUrlSafetyLimit' => max(1, (int) config('maxguard.crawler.max_discovered_urls', 100_000)),
+            'queueInfo' => [
+                'connection' => $connection,
+                'driver' => (string) config('queue.connections.'.config('queue.default', 'sync').'.driver', ''),
+                'control_queues' => implode(',', [
+                    (string) config('maxguard.queue', 'scans'),
+                    (string) config('maxguard.finalize_queue', 'scan-finalize'),
+                ]),
+                'page_queue' => (string) config('maxguard.page_queue', 'scan-pages'),
+                'control_worker_command' => sprintf(
+                    'php artisan queue:work %s --queue=%s,%s --sleep=2 --tries=3 --timeout=%d --memory=%d',
+                    $connection,
+                    (string) config('maxguard.queue', 'scans'),
+                    (string) config('maxguard.finalize_queue', 'scan-finalize'),
+                    $controlTimeout,
+                    max(128, (int) config('maxguard.worker_memory_mb', 1024)),
+                ),
+                'page_worker_command' => sprintf(
+                    'php artisan queue:work %s --queue=%s --sleep=1 --tries=2 --timeout=%d --memory=%d',
+                    $connection,
+                    (string) config('maxguard.page_queue', 'scan-pages'),
+                    $pageTimeout,
+                    max(128, (int) config('maxguard.worker_memory_mb', 1024)),
+                ),
+                'page_workers' => $pageWorkers,
+            ],
         ]);
     }
 
@@ -40,19 +98,134 @@ final class ScanController extends Controller
             return back()->withErrors(['site' => 'Website not found.'])->withInput();
         }
 
-        dd($websites);
         $queued = 0;
+        $skipped = [];
         foreach ($websites as $website) {
             try {
-                $dispatcher->dispatch($website, $data['scan_type'], auth()->id());
+                $dispatcher->dispatch(
+                    $website,
+                    $data['scan_type'],
+                    auth()->id(),
+                    isset($data['max_urls']) ? (int) $data['max_urls'] : null,
+                    (bool) ($data['use_ai'] ?? false),
+                    (bool) ($data['force_rescan'] ?? false),
+                );
                 $queued++;
-            } catch (\Illuminate\Validation\ValidationException) {
-                // A scan is already active for this website; continue queuing the rest.
+            } catch (\Illuminate\Validation\ValidationException $exception) {
+                $skipped = array_merge($skipped, $exception->validator->errors()->all());
             }
         }
 
-        return redirect()
+        if ($queued === 0) {
+            return back()->withErrors([
+                'queue' => $skipped[0] ?? 'No scan was queued. Run [php artisan maxguard:queue-doctor] to check the queue configuration.',
+            ])->withInput();
+        }
+
+        $response = redirect()
             ->route('scans.index')
-            ->with('status', $queued > 0 ? "{$queued} scan(s) queued successfully." : 'All selected websites already have an active scan.');
+            ->with('status', "{$queued} scan(s) queued successfully.");
+
+        if ($skipped !== []) {
+            $response->with('error', count($skipped).' scan(s) were skipped: '.$skipped[0]);
+        }
+
+        return $response;
+    }
+
+    public function live(): JsonResponse
+    {
+        return response()->json([
+            'scans' => $this->recentScans()->map(fn (Scan $scan): array => $this->scanPayload($scan))->all(),
+            'findings' => $this->liveFindings()->map(fn (Finding $finding): array => $this->findingPayload($finding))->all(),
+            'refreshed_at' => now()->toIso8601String(),
+        ]);
+    }
+
+    /** @return \Illuminate\Database\Eloquent\Collection<int, Scan> */
+    private function recentScans()
+    {
+        return Scan::query()
+            ->whereHas('website', fn ($query) => $query->accessibleBy(auth()->id()))
+            ->with('website')
+            ->withCount([
+                'findings',
+                'targets as targets_queued_count' => fn ($query) => $query->where('status', ScanTarget::STATUS_QUEUED),
+                'targets as targets_running_count' => fn ($query) => $query->where('status', ScanTarget::STATUS_RUNNING),
+                'targets as targets_failed_count' => fn ($query) => $query->where('status', ScanTarget::STATUS_FAILED),
+            ])
+            ->latest()
+            ->limit(10)
+            ->get();
+    }
+
+    /** @return \Illuminate\Database\Eloquent\Collection<int, Finding> */
+    private function liveFindings()
+    {
+        return Finding::query()
+            ->whereHas('website', fn ($query) => $query->accessibleBy(auth()->id()))
+            ->with(['website', 'page', 'scan'])
+            ->latest('last_seen_at')
+            ->limit(100)
+            ->get();
+    }
+
+    /** @return array<string, mixed> */
+    private function scanPayload(Scan $scan): array
+    {
+        return [
+            'id' => $scan->id,
+            'website' => $scan->website->domain,
+            'type' => ucfirst($scan->type),
+            'status' => $scan->status,
+            'progress' => $scan->progress,
+            'pages_scanned' => $scan->pages_scanned,
+            'pages_skipped_unchanged' => $scan->pages_skipped_unchanged,
+            'pages_discovered' => $scan->pages_discovered,
+            'max_urls' => $scan->max_urls,
+            'findings_count' => $scan->findings_count,
+            'ai_enabled' => (bool) $scan->use_ai,
+            'force_rescan' => (bool) $scan->force_rescan,
+            'ai_pages_analyzed' => $scan->ai_pages_analyzed,
+            'ai_findings_count' => $scan->ai_findings_count,
+            'ai_limit_reached' => (bool) data_get($scan->meta, 'ai_limit_reached', false),
+            'ai_errors' => (int) data_get($scan->meta, 'ai_errors', 0),
+            'is_sampled' => (bool) data_get($scan->meta, 'is_sampled', false),
+            'sampling_mode' => (string) data_get($scan->meta, 'sampling_mode', 'all_urls'),
+            'available_urls' => (int) data_get($scan->meta, 'available_urls', $scan->pages_discovered),
+            'site_urls_discovered' => (int) data_get($scan->meta, 'site_urls_discovered', $scan->pages_discovered),
+            'current_url' => $scan->current_url,
+            'started' => ($scan->started_at ?? $scan->created_at)->diffForHumans(),
+            'error_message' => $scan->error_message,
+            'sitemaps' => (int) data_get($scan->meta, 'sitemap_files_processed', 0),
+            'failed' => (int) data_get($scan->meta, 'failed_requests', 0),
+            'blocked' => (int) data_get($scan->meta, 'blocked_by_robots', 0),
+            'parallel_scan' => (bool) data_get($scan->meta, 'parallel_scan', false),
+            'batch_size' => (int) data_get($scan->meta, 'page_batch_size', 0),
+            'batches_completed' => (int) data_get($scan->meta, 'batches_completed', 0),
+            'batches_total' => (int) data_get($scan->meta, 'batches_total', 0),
+            'targets_queued' => (int) ($scan->targets_queued_count ?? data_get($scan->meta, 'targets_queued', 0)),
+            'targets_running' => (int) ($scan->targets_running_count ?? data_get($scan->meta, 'targets_running', 0)),
+            'targets_failed' => (int) ($scan->targets_failed_count ?? data_get($scan->meta, 'targets_failed', 0)),
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function findingPayload(Finding $finding): array
+    {
+        return [
+            'id' => $finding->public_id,
+            'scan_id' => $finding->scan_id,
+            'website' => $finding->website->domain,
+            'url' => $finding->page?->url ?? $finding->website->start_url,
+            'title' => $finding->title,
+            'category' => $finding->category,
+            'severity' => $finding->severity,
+            'confidence' => $finding->confidence,
+            'status' => $finding->status,
+            'source' => str_starts_with($finding->rule_key, 'ai.') ? 'AI' : 'Rules',
+            'detected' => $finding->last_seen_at->diffForHumans(),
+            'detail_url' => route('findings.show', $finding),
+        ];
     }
 }

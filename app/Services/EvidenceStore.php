@@ -82,4 +82,44 @@ final class EvidenceStore
             'captured_at' => now(),
         ]);
     }
+
+    public function attachSignalOnly(
+        Finding $finding,
+        Scan $scan,
+        string $url,
+        DetectorResult $result,
+    ): void {
+        $disk = (string) config('maxguard.evidence_disk', 'local');
+        $payload = json_encode([
+            'rule_key' => $result->ruleKey,
+            'category' => $result->category,
+            'severity' => $result->severity,
+            'confidence' => $result->confidence,
+            'signals' => $result->signals,
+            'captured_url' => $url,
+            'captured_at' => ($scan->started_at ?? $scan->created_at)->toIso8601String(),
+            'evidence_mode' => 'parallel_signature_analysis',
+        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+
+        $prefix = trim((string) config('maxguard.evidence_prefix', 'maxguard/evidence'), '/');
+        $signalHash = hash('sha256', $payload);
+        $signalPath = "{$prefix}/website-{$scan->website_id}/scan-{$scan->id}/signals/{$finding->public_id}-{$signalHash}.json";
+        if (! Storage::disk($disk)->put($signalPath, $payload)) {
+            throw new RuntimeException('Unable to persist detector evidence.');
+        }
+
+        EvidenceItem::firstOrCreate([
+            'finding_id' => $finding->id,
+            'scan_id' => $scan->id,
+            'type' => 'detector_signal',
+            'sha256' => $signalHash,
+        ], [
+            'disk' => $disk,
+            'path' => $signalPath,
+            'mime_type' => 'application/json',
+            'size_bytes' => strlen($payload),
+            'metadata' => ['rule_key' => $result->ruleKey, 'parallel' => true],
+            'captured_at' => now(),
+        ]);
+    }
 }
