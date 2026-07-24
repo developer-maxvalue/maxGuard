@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 final class Website extends Model
 {
@@ -62,6 +63,16 @@ final class Website extends Model
     public function findings(): HasMany
     {
         return $this->hasMany(Finding::class);
+    }
+
+    public function ga4Connection(): HasOne
+    {
+        return $this->hasOne(WebsiteGa4Connection::class);
+    }
+
+    public function copyrightReviews(): HasMany
+    {
+        return $this->hasMany(CopyrightReview::class);
     }
 
     public function scopeDueForScan(Builder $query): Builder

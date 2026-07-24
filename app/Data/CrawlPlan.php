@@ -24,6 +24,9 @@ final class CrawlPlan
     public int $siteUrlsDiscovered = 0;
     public string $selectionMode = 'all_urls';
 
+    /** @var array<string, string> normalized URL hash => crawl error */
+    public array $urlErrors = [];
+
     public function __construct(
         public int $limit,
         public int $configuredLimit,
@@ -66,12 +69,24 @@ final class CrawlPlan
 
     public function usesFixedSitemapSample(): bool
     {
-        return in_array($this->selectionMode, ['latest_posts', 'latest_sitemap_urls', 'parallel_batch'], true);
+        return in_array($this->selectionMode, ['latest_posts', 'latest_sitemap_urls', 'parallel_batch', 'ga4_traffic_7d'], true);
     }
 
     public function count(): int
     {
         return count($this->urls);
+    }
+
+    /** Keep a concise per-URL fetch failure for target telemetry and UI debug. */
+    public function recordUrlError(string $url, string $message): void
+    {
+        $this->urlErrors[hash('sha256', $url)] = mb_substr($message, 0, 5000);
+    }
+
+    /** Return the exact crawler failure previously recorded for this URL. */
+    public function errorFor(string $url): ?string
+    {
+        return $this->urlErrors[hash('sha256', $url)] ?? null;
     }
 
     public function discoveryConfidence(): string

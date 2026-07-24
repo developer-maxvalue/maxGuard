@@ -62,7 +62,10 @@ final class SiteController extends Controller
     public function show(Website $site): View
     {
         abort_if(auth()->id() !== null && $site->user_id !== auth()->id(), 403);
-        $site->load(['findings' => fn ($query) => $query->open()->with('page')]);
+        $site->load([
+            'ga4Connection',
+            'findings' => fn ($query) => $query->open()->with('page'),
+        ]);
         $grouped = $site->findings->groupBy('category');
         $policyDefinitions = [
             'Prohibited & deceptive' => ['Prohibited content', 'Deceptive practices'],
@@ -74,7 +77,10 @@ final class SiteController extends Controller
 
         $policies = [];
         foreach ($policyDefinitions as $name => $categories) {
-            $findings = $grouped->only($categories)->flatten(1);
+            // Eloquent\Collection::only() expects model primary keys. After
+            // groupBy(), each item is itself a Collection, so calling only()
+            // makes Eloquent call getKey() on a Collection and crashes.
+            $findings = $site->findings->whereIn('category', $categories);
             $penalty = $findings->sum(fn (Finding $finding): int => match ($finding->severity) {
                 'critical' => 30, 'high' => 18, 'review' => 8, default => 2,
             });
@@ -105,6 +111,8 @@ final class SiteController extends Controller
             ]),
             'aiReady' => (bool) config('maxguard.ai.enabled') && filled(config('maxguard.ai.api_key')),
             'maxUrlSafetyLimit' => max(1, (int) config('maxguard.crawler.max_discovered_urls', 100_000)),
+            'ga4' => $site->ga4Connection,
+            'trafficPages' => $site->pages()->where('ga4_views_7d', '>', 0)->orderByDesc('ga4_views_7d')->limit(20)->get(),
         ]);
     }
 

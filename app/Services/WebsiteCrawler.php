@@ -7,6 +7,7 @@ use App\Data\PageDocument;
 use App\Models\Website;
 use Generator;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use SplQueue;
 use Throwable;
 
@@ -135,7 +136,13 @@ final class WebsiteCrawler
                 yield $page;
             } catch (Throwable $exception) {
                 $plan->failedRequests++;
-                report($exception);
+                $plan->recordUrlError($url, $exception->getMessage());
+                // A remote URL redirect/timeout is an expected target failure,
+                // not an application exception requiring a full stack trace.
+                Log::warning('Crawler could not fetch URL.', [
+                    'url' => $url,
+                    'error' => mb_substr($exception->getMessage(), 0, 1000),
+                ]);
             }
         }
     }

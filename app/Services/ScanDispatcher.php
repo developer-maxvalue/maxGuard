@@ -11,6 +11,13 @@ use Throwable;
 
 final class ScanDispatcher
 {
+    /**
+     * Create exactly one scan and enqueue its orchestrator.
+     *
+     * The website row is locked so two browser requests cannot start duplicate
+     * scans. forceRescan=false lets ScanRunner reuse a compatible analysis when
+     * the URL content_hash is unchanged; true is intended for ruleset/key tests.
+     */
     public function dispatch(
         Website $website,
         string $type = 'full',
@@ -29,7 +36,7 @@ final class ScanDispatcher
         }
         if ($useAi && (! (bool) config('maxguard.ai.enabled') || blank(config('maxguard.ai.api_key')))) {
             throw ValidationException::withMessages([
-                'use_ai' => 'AI analysis is not configured. Set OPENAI_API_KEY and MAXGUARD_AI_ENABLED=true.',
+                'use_ai' => 'AI analysis is not configured. Set GEMINI_API_KEY and MAXGUARD_AI_ENABLED=true.',
             ]);
         }
 

@@ -180,7 +180,9 @@
                     <tbody id="mg-live-scans-body">
                         @forelse($recentScans as $scan)
                             <tr>
-                                <td class="fw-semibold">{{ $scan->website->domain }}</td>
+                                <td><a class="fw-semibold" href="{{ route('scans.show', $scan) }}">{{ $scan->website->domain }}</a>
+                                    <a class="d-block fs-9 text-primary mt-1" href="{{ route('scans.show', $scan) }}">View {{ number_format($scan->pages_discovered) }} URL details →</a>
+                                </td>
                                 <td>{{ ucfirst($scan->type) }}</td>
                                 <td><x-status-badge :status="$scan->status" />
                                     @if (data_get($scan->meta, 'is_sampled', false))

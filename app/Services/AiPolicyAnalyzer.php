@@ -7,6 +7,8 @@ use App\Data\DetectorResult;
 use App\Data\PageDocument;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use JsonException;
 use Throwable;
@@ -39,17 +41,31 @@ final class AiPolicyAnalyzer
         }
 
         $model = (string) config('maxguard.ai.model', 'gpt-5.6-terra');
+        if ($reason = Cache::get('maxguard:circuit:ai')) {
+            return new AiAnalysisOutcome(
+                attempted: false,
+                model: $model,
+                error: 'Temporarily skipped by API circuit breaker: '.(string) $reason,
+            );
+        }
         $baseUrl = rtrim((string) config('maxguard.ai.base_url', 'https://api.openai.com/v1'), '/');
         $maxChars = max(1000, (int) config('maxguard.ai.max_input_chars', 12_000));
         $content = mb_substr($page->text, 0, $maxChars);
 
         try {
+            // A model-specific override keeps legacy installations/tests safe
+            // when they change only the model but retain a cached provider.
+            $provider = (string) config('maxguard.ai.provider', 'openai');
+            if ($provider === 'gemini' && ! str_starts_with(strtolower($model), 'gpt-')) {
+                return $this->analyzeWithGemini($page, $content, $model);
+            }
+
             $response = Http::withToken((string) config('maxguard.ai.api_key'))
                 ->acceptJson()
                 ->asJson()
                 ->connectTimeout((int) config('maxguard.ai.connect_timeout_seconds', 10))
                 ->timeout((int) config('maxguard.ai.timeout_seconds', 90))
-                ->retry(2, 750, fn (Throwable $exception): bool => $exception instanceof ConnectionException)
+                ->retry(2, 750, fn (Throwable $exception): bool => $exception instanceof ConnectionException, false)
                 ->post($baseUrl.'/responses', [
                     'model' => $model,
                     'store' => false,
@@ -80,6 +96,7 @@ final class AiPolicyAnalyzer
                 return new AiAnalysisOutcome(
                     attempted: true,
                     model: $model,
+                    httpStatus: $response->status(),
                     error: 'OpenAI API returned HTTP '.$response->status().'.',
                 );
             }
@@ -92,7 +109,7 @@ final class AiPolicyAnalyzer
             }
 
             $analysis = json_decode($text, true, 512, JSON_THROW_ON_ERROR);
-            $findings = $this->toDetectorResults(is_array($analysis) ? $analysis : [], $model, $responseId);
+            $findings = $this->toDetectorResults(is_array($analysis) ? $analysis : [], $model, $responseId, 'openai');
 
             return new AiAnalysisOutcome(
                 attempted: true,
@@ -103,14 +120,69 @@ final class AiPolicyAnalyzer
                 outputTokens: (int) data_get($payload, 'usage.output_tokens', 0),
             );
         } catch (JsonException $exception) {
-            report($exception);
+            Log::warning('AI returned invalid JSON.', ['model' => $model]);
 
             return new AiAnalysisOutcome(true, model: $model, error: 'AI returned invalid JSON.');
         } catch (Throwable $exception) {
-            report($exception);
+            Log::warning('AI policy request failed.', [
+                'model' => $model,
+                'error' => mb_substr($exception->getMessage(), 0, 1000),
+            ]);
 
             return new AiAnalysisOutcome(true, model: $model, error: mb_substr($exception->getMessage(), 0, 500));
         }
+    }
+
+    /** Call Gemini using JSON response mode and convert it to standard findings. */
+    private function analyzeWithGemini(PageDocument $page, string $content, string $model): AiAnalysisOutcome
+    {
+        $url = rtrim((string) config('maxguard.ai.gemini_base_url'), '/')
+            .'/models/'.rawurlencode($model).':generateContent?key='
+            .rawurlencode((string) config('maxguard.ai.api_key'));
+        $response = Http::acceptJson()->asJson()
+            ->connectTimeout((int) config('maxguard.ai.connect_timeout_seconds', 10))
+            ->timeout((int) config('maxguard.ai.timeout_seconds', 90))
+            ->retry(2, 750, fn (Throwable $e): bool => $e instanceof ConnectionException, false)
+            ->post($url, [
+                'systemInstruction' => ['parts' => [['text' => $this->systemPrompt()]]],
+                'contents' => [['role' => 'user', 'parts' => [['text' => $this->pagePrompt($page, $content)]]]],
+                'generationConfig' => [
+                    'responseMimeType' => 'application/json',
+                    'responseJsonSchema' => $this->schema(),
+                    'maxOutputTokens' => max(500, (int) config('maxguard.ai.max_output_tokens', 1800)),
+                    'temperature' => 0.1,
+                ],
+            ]);
+
+        if (! $response->successful()) {
+            if ($response->status() === 429) {
+                Cache::put('maxguard:circuit:ai', 'Gemini quota/rate limit reached.', now()->addMinute());
+            }
+            return new AiAnalysisOutcome(
+                true,
+                model: $model,
+                httpStatus: $response->status(),
+                error: 'Gemini API returned HTTP '.$response->status().': '
+                    .mb_substr((string) ($response->json('error.message') ?: $response->body()), 0, 1000),
+            );
+        }
+
+        $payload = (array) $response->json();
+        $text = data_get($payload, 'candidates.0.content.parts.0.text');
+        if (! is_string($text)) {
+            return new AiAnalysisOutcome(true, model: $model, error: 'Gemini response did not contain structured JSON.');
+        }
+        $analysis = json_decode($text, true, 512, JSON_THROW_ON_ERROR);
+        $responseId = is_string($payload['responseId'] ?? null) ? $payload['responseId'] : null;
+
+        return new AiAnalysisOutcome(
+            attempted: true,
+            findings: $this->toDetectorResults((array) $analysis, $model, $responseId, 'gemini'),
+            model: $model,
+            responseId: $responseId,
+            inputTokens: (int) data_get($payload, 'usageMetadata.promptTokenCount', 0),
+            outputTokens: (int) data_get($payload, 'usageMetadata.candidatesTokenCount', 0),
+        );
     }
 
     private function systemPrompt(): string
@@ -189,7 +261,7 @@ PROMPT;
     }
 
     /** @param array<string, mixed> $analysis @return list<DetectorResult> */
-    private function toDetectorResults(array $analysis, string $model, ?string $responseId): array
+    private function toDetectorResults(array $analysis, string $model, ?string $responseId, string $source = 'openai'): array
     {
         $results = [];
         $minimumConfidence = max(0, min(100, (int) config('maxguard.ai.min_confidence', 70)));
@@ -226,7 +298,7 @@ PROMPT;
                 summary: mb_substr(trim((string) ($finding['summary'] ?? 'AI policy review signal.')), 0, 5000),
                 policyReference: $mapping['policy'],
                 signals: [
-                    'analysis_source' => 'openai',
+                    'analysis_source' => $source,
                     'model' => $model,
                     'response_id' => $responseId,
                     'policy_code' => $code,

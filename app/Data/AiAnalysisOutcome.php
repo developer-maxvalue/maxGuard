@@ -12,6 +12,7 @@ final class AiAnalysisOutcome
         public ?string $responseId = null,
         public int $inputTokens = 0,
         public int $outputTokens = 0,
+        public ?int $httpStatus = null,
         public ?string $error = null,
     ) {
     }

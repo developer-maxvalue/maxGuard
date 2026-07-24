@@ -14,6 +14,9 @@ use Illuminate\View\View;
 
 final class ScanController extends Controller
 {
+    /**
+     * Render the scan center with queue capacity and recent portfolio activity.
+     */
     public function index(): View
     {
         $visibleScans = Scan::query()->whereHas('website', fn ($query) => $query->accessibleBy(auth()->id()));
@@ -85,6 +88,68 @@ final class ScanController extends Controller
         ]);
     }
 
+    /**
+     * Show every discovered URL and its live processing stage for one scan.
+     */
+    public function show(Scan $scan): View
+    {
+        $this->authorizeScan($scan);
+        $scan->load('website')->loadCount([
+            'targets as queued_targets_count' => fn ($query) => $query->where('status', ScanTarget::STATUS_QUEUED),
+            'targets as running_targets_count' => fn ($query) => $query->where('status', ScanTarget::STATUS_RUNNING),
+            'targets as failed_targets_count' => fn ($query) => $query->where('status', ScanTarget::STATUS_FAILED),
+            'targets as reused_targets_count' => fn ($query) => $query->where('status', ScanTarget::STATUS_REUSED),
+        ]);
+        $targets = $scan->targets()
+            ->with('page')
+            ->withCount('events')
+            ->orderBy('position')
+            ->paginate(100);
+
+        return view('scans.show', compact('scan', 'targets'));
+    }
+
+    /**
+     * Show the complete sanitized event timeline and findings for one URL.
+     */
+    public function target(Scan $scan, ScanTarget $target): View
+    {
+        $this->authorizeScan($scan);
+        abort_unless($target->scan_id === $scan->id, 404);
+        $target->load([
+            'page.findings' => fn ($query) => $query->where('scan_id', $scan->id)->latest(),
+            'events',
+        ]);
+
+        return view('scans.target', compact('scan', 'target'));
+    }
+
+    /**
+     * Return lightweight live URL state for polling without reloading the page.
+     */
+    public function targetsLive(Scan $scan): JsonResponse
+    {
+        $this->authorizeScan($scan);
+
+        return response()->json([
+            'scan' => [
+                'status' => $scan->status,
+                'progress' => $scan->progress,
+                'pages_scanned' => $scan->pages_scanned,
+                'pages_discovered' => $scan->pages_discovered,
+            ],
+            'targets' => $scan->targets()->orderBy('position')->get()->map(fn (ScanTarget $target): array => [
+                'id' => $target->id,
+                'status' => $target->status,
+                'stage' => $target->current_stage,
+                'attempts' => $target->attempts,
+                'findings' => $target->findings_count,
+                'error' => $target->error_message,
+                'updated_at' => $target->updated_at->toIso8601String(),
+            ])->all(),
+        ]);
+    }
+
     public function store(StartScanRequest $request, ScanDispatcher $dispatcher): RedirectResponse
     {
         $data = $request->validated();
@@ -133,6 +198,13 @@ final class ScanController extends Controller
         return $response;
     }
 
+    /** Abort when the current user does not own the scan's website. */
+    private function authorizeScan(Scan $scan): void
+    {
+        $scan->loadMissing('website');
+        abort_if(auth()->id() !== null && $scan->website->user_id !== auth()->id(), 403);
+    }
+
     public function live(): JsonResponse
     {
         return response()->json([
@@ -175,6 +247,7 @@ final class ScanController extends Controller
     {
         return [
             'id' => $scan->id,
+            'detail_url' => route('scans.show', $scan),
             'website' => $scan->website->domain,
             'type' => ucfirst($scan->type),
             'status' => $scan->status,

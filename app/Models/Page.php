@@ -23,6 +23,8 @@ final class Page extends Model
         'content_hash',
         'word_count',
         'ad_count',
+        'ga4_views_7d',
+        'ga4_synced_at',
         'snapshot_path',
         'last_scanned_at',
         'meta',
@@ -31,6 +33,7 @@ final class Page extends Model
     protected $casts = [
         'meta' => 'array',
         'last_scanned_at' => 'datetime',
+        'ga4_synced_at' => 'datetime',
     ];
 
     public function website(): BelongsTo
@@ -47,5 +50,9 @@ final class Page extends Model
     {
         return $this->hasMany(Finding::class);
     }
-}
 
+    public function copyrightReviews(): HasMany
+    {
+        return $this->hasMany(CopyrightReview::class);
+    }
+}

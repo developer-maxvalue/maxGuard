@@ -50,6 +50,7 @@ final class ScanRunner
 
         if (! $scan->targets()->exists()) {
             $plan = $this->crawler->discover($scan->website, $scan->max_urls ? (int) $scan->max_urls : null);
+            $this->prioritizeWithGa4($scan, $plan);
             if ($plan->count() === 0) {
                 throw new RuntimeException('No crawlable URLs were discovered. Check the sitemap, robots.txt and website availability.');
             }
@@ -124,6 +125,7 @@ final class ScanRunner
                 })
                 ->update([
                     'status' => ScanTarget::STATUS_RUNNING,
+                    'current_stage' => 'crawl',
                     'claim_token' => $claimToken,
                     'attempts' => DB::raw('attempts + 1'),
                     'started_at' => now(),
@@ -175,7 +177,11 @@ final class ScanRunner
 
         foreach ($targets as $target) {
             if (! isset($processed[$target->id])) {
-                $this->failTarget($target, 'The crawler did not return a crawlable HTML document for this URL.');
+                $this->failTarget(
+                    $target,
+                    $plan->errorFor($target->url)
+                        ?? 'The crawler did not return a crawlable HTML document for this URL.',
+                );
             }
         }
 
@@ -296,6 +302,7 @@ final class ScanRunner
 
         try {
             $plan = $this->crawler->discover($website, $scan->max_urls ? (int) $scan->max_urls : null);
+            $this->prioritizeWithGa4($scan, $plan);
             $scan->update([
                 'pages_discovered' => $plan->count(),
                 'progress' => 5,
@@ -337,7 +344,10 @@ final class ScanRunner
                 }
 
                 $scannedPageIds[] = $page->id;
-                $results = $this->detectors->analyze($document, $scan->type);
+                $results = array_merge(
+                    $this->detectors->analyze($document, $scan->type),
+                    app(SightengineTextAnalyzer::class)->analyze($document),
+                );
                 $aiAnalyzedThisPage = false;
 
                 if ($this->shouldRunAi($scan, $aiAnalyzed)) {
@@ -410,6 +420,15 @@ final class ScanRunner
 
     private function processParallelDocument(Scan $scan, ScanTarget $target, PageDocument $document): void
     {
+        $telemetry = app(ScanTelemetry::class);
+        $crawlStarted = $telemetry->start($target, 'crawl', 'crawler', 'HTML document downloaded and parsed.');
+        $telemetry->finish($target, 'crawl', $crawlStarted, 'success', 'Crawl completed.', [
+            'http_status' => $document->statusCode,
+            'word_count' => $document->wordCount,
+            'language' => $document->language,
+            'content_hash' => $document->contentHash(),
+        ]);
+
         $website = $scan->website;
         $existingPage = $this->existingPage($website, $document);
         $reuseAnalysis = $this->canReuseAnalysis($scan, $existingPage, $document);
@@ -424,9 +443,15 @@ final class ScanRunner
         );
 
         if ($reuseAnalysis) {
+            $reuseStarted = $telemetry->start($target, 'reuse', 'incremental-cache', 'Checking prior content analysis.');
+            $telemetry->finish($target, 'reuse', $reuseStarted, 'reused', 'Content hash and analysis contract are unchanged; paid analyzers were skipped.', [
+                'content_hash' => $document->contentHash(),
+                'last_scan_id' => $existingPage?->last_scan_id,
+            ]);
             $target->update([
                 'page_id' => $page->id,
                 'status' => ScanTarget::STATUS_REUSED,
+                'current_stage' => 'finished',
                 'analysis_reused' => true,
                 'findings_count' => 0,
                 'finished_at' => now(),
@@ -436,7 +461,34 @@ final class ScanRunner
             return;
         }
 
-        $results = $this->detectors->analyze($document, $scan->type, false);
+        // Local rules run first; the external moderation result is normalized
+        // into the same finding format and therefore appears on the same URL.
+        $localStarted = $telemetry->start($target, 'local_rules', 'MaxGuard local detectors', 'Running duplicate, warning phrase, copyright, quality, ads, privacy and technical rules.');
+        $localResults = $this->detectors->analyze($document, $scan->type, false);
+        $telemetry->finish($target, 'local_rules', $localStarted, 'success', count($localResults).' local finding(s).', [
+            'findings_count' => count($localResults),
+            'rules' => array_values(array_map(fn (DetectorResult $result): string => $result->ruleKey, $localResults)),
+        ]);
+
+        $sightengine = app(SightengineTextAnalyzer::class);
+        $thirdPartyStarted = $telemetry->start($target, 'sightengine', 'Sightengine', 'Submitting page text to third-party moderation.');
+        $thirdPartyResults = $sightengine->analyze($document);
+        $thirdPartyTrace = $sightengine->lastTrace();
+        $thirdPartyStatus = isset($thirdPartyTrace['error']) ? 'failed' : (($thirdPartyTrace['attempted'] ?? false) ? 'success' : 'skipped');
+        $externalErrors = isset($thirdPartyTrace['error'])
+            ? ['Sightengine: '.(string) $thirdPartyTrace['error']]
+            : [];
+        $telemetry->finish(
+            $target,
+            'sightengine',
+            $thirdPartyStarted,
+            $thirdPartyStatus,
+            isset($thirdPartyTrace['error'])
+                ? (string) $thirdPartyTrace['error']
+                : ((string) ($thirdPartyTrace['skipped_reason'] ?? count($thirdPartyResults).' moderation finding(s).')),
+            $thirdPartyTrace + ['findings_count' => count($thirdPartyResults)],
+        );
+        $results = array_merge($localResults, $thirdPartyResults);
         $aiAttempted = false;
         $aiAnalyzed = false;
         $aiFindings = 0;
@@ -447,19 +499,42 @@ final class ScanRunner
         if ($target->ai_attempted) {
             $aiAttempted = true;
             $aiError = 'Previous AI attempt was interrupted; it was not repeated to avoid duplicate API cost.';
+            $externalErrors[] = 'AI: '.$aiError;
         } elseif ($this->reserveParallelAi($scan->id)) {
             $target->update(['ai_attempted' => true]);
             $aiAttempted = true;
+            $aiStarted = $telemetry->start($target, 'gemini', 'Gemini', 'Submitting normalized page content for semantic policy review.');
             $outcome = $this->ai->analyze($document);
             $aiInputTokens = $outcome->inputTokens;
             $aiOutputTokens = $outcome->outputTokens;
             $aiError = $outcome->error;
+            if ($aiError !== null && $outcome->attempted) {
+                $externalErrors[] = 'AI: '.$aiError;
+            }
             if ($outcome->attempted && $outcome->error === null) {
                 $aiAnalyzed = true;
                 $aiResults = $this->detectors->filter($outcome->findings, $scan->type);
                 $aiFindings = count($aiResults);
                 $results = array_merge($results, $aiResults);
             }
+            $telemetry->finish(
+                $target,
+                'gemini',
+                $aiStarted,
+                ! $outcome->attempted ? 'skipped' : ($outcome->error === null ? 'success' : 'failed'),
+                $outcome->error ?? $aiFindings.' AI finding(s).',
+                [
+                    'request_id' => $outcome->responseId,
+                    'http_status' => $outcome->httpStatus,
+                    'model' => $outcome->model,
+                    'input_tokens' => $outcome->inputTokens,
+                    'output_tokens' => $outcome->outputTokens,
+                    'findings_count' => $aiFindings,
+                ],
+            );
+        } else {
+            $aiStarted = $telemetry->start($target, 'gemini', 'Gemini', 'Checking whether AI review is enabled and within its page limit.');
+            $telemetry->finish($target, 'gemini', $aiStarted, 'skipped', 'AI review disabled, unconfigured, or page limit reached.');
         }
 
         $snapshotPath = $results === [] ? null : $this->evidence->storePageSnapshot($scan, $page, $document);
@@ -485,8 +560,15 @@ final class ScanRunner
             'ai_findings_count' => $aiFindings,
             'ai_input_tokens' => $aiInputTokens,
             'ai_output_tokens' => $aiOutputTokens,
-            'error_message' => $aiError === null ? null : mb_substr('AI: '.$aiError, 0, 5000),
+            'error_message' => $externalErrors === [] ? null : mb_substr(implode("\n", $externalErrors), 0, 5000),
+            'debug_meta' => [
+                'external_errors' => $externalErrors,
+                'sightengine_attempted' => (bool) ($thirdPartyTrace['attempted'] ?? false),
+                'sightengine_http_status' => $thirdPartyTrace['http_status'] ?? null,
+                'sightengine_request_id' => $thirdPartyTrace['request_id'] ?? null,
+            ],
             'finished_at' => now(),
+            'current_stage' => 'finished',
         ]);
         $this->recordParallelSuccess($scan->id, $document->url, false, count($results), $aiFindings);
     }
@@ -547,6 +629,8 @@ final class ScanRunner
 
     private function failTarget(ScanTarget $target, string $message): void
     {
+        $started = app(ScanTelemetry::class)->start($target, 'pipeline', 'ScanRunner', 'URL processing failed before the pipeline could finish.');
+        app(ScanTelemetry::class)->finish($target, 'pipeline', $started, 'failed', $message);
         ScanTarget::query()
             ->whereKey($target->id)
             ->where('status', ScanTarget::STATUS_RUNNING)
@@ -554,6 +638,7 @@ final class ScanRunner
                 'status' => ScanTarget::STATUS_FAILED,
                 'error_message' => mb_substr($message, 0, 5000),
                 'finished_at' => now(),
+                'current_stage' => 'failed',
                 'updated_at' => now(),
             ]);
     }
@@ -1026,5 +1111,34 @@ final class ScanRunner
         };
 
         return round((float) $website->expected_monthly_revenue * $factor, 2);
+    }
+
+    /**
+     * A priority scan uses GA4's seven-day order. Only URLs belonging to the
+     * crawled site are retained; on API failure the sitemap order is preserved.
+     */
+    private function prioritizeWithGa4(Scan $scan, CrawlPlan $plan): void
+    {
+        if ($scan->type !== 'priority' || $scan->website->ga4Connection === null) {
+            return;
+        }
+        try {
+            $traffic = app(Ga4TrafficService::class)->sync($scan->website);
+            $byPath = [];
+            foreach ($plan->urls as $url) {
+                $byPath[parse_url($url, PHP_URL_PATH) ?: '/'] = $url;
+            }
+            $ordered = [];
+            foreach (array_keys($traffic) as $path) {
+                if (isset($byPath[$path])) {
+                    $ordered[] = $byPath[$path];
+                    unset($byPath[$path]);
+                }
+            }
+            $plan->urls = array_values(array_merge($ordered, $byPath));
+            $plan->configureSelection('ga4_traffic_7d', count($plan->urls), count($plan->urls), false);
+        } catch (Throwable $exception) {
+            report($exception);
+        }
     }
 }

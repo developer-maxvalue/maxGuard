@@ -25,6 +25,29 @@
         </div>
     </div>
 
+    @if($finding['page_id'])
+        @php($review = $finding['copyright_review'])
+        <div class="card mg-card mb-5"><div class="card-body p-6">
+            <h2 class="mg-card-title">Manual Google copyright check</h2>
+            <p class="text-muted">Search the exact page title, inspect matching publishers, then save the human decision.</p>
+            <a class="btn btn-light-primary mb-4" target="_blank" rel="noopener noreferrer"
+               href="https://www.google.com/search?q={{ urlencode('"' . ($finding['page_title'] ?: $finding['url']) . '"') }}">
+                <i class="bi bi-google me-2"></i>Search exact title
+            </a>
+            <form method="POST" action="{{ route('copyright-reviews.update', $finding['page_id']) }}" class="row g-3">
+                @csrf @method('PATCH')
+                <div class="col-md-3"><select name="status" class="form-select">
+                    @foreach(['pending' => 'Pending', 'clear' => 'Clear', 'suspected' => 'Suspected', 'confirmed' => 'Confirmed violation'] as $value => $label)
+                        <option value="{{ $value }}" @selected(($review?->status ?? 'pending') === $value)>{{ $label }}</option>
+                    @endforeach
+                </select></div>
+                <div class="col-md-4"><input type="url" class="form-control" name="matched_url" value="{{ $review?->matched_url }}" placeholder="Matching source URL"></div>
+                <div class="col-md-4"><input class="form-control" name="notes" value="{{ $review?->notes }}" placeholder="Review notes"></div>
+                <div class="col-md-1"><button class="btn btn-primary">Save</button></div>
+            </form>
+        </div></div>
+    @endif
+
     <div class="row g-5">
         <div class="col-xl-8">
             <div class="card mg-card mb-5">

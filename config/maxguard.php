@@ -32,10 +32,14 @@ return [
 
     'ai' => [
         'enabled' => (bool) env('MAXGUARD_AI_ENABLED', false),
-        'api_key' => env('OPENAI_API_KEY'),
+        // OpenAI remains the code-level compatibility default. The distributed
+        // MaxGuard env template explicitly selects Gemini for new installs.
+        'provider' => env('MAXGUARD_AI_PROVIDER', 'openai'),
+        'api_key' => env('GEMINI_API_KEY', env('OPENAI_API_KEY')),
         'base_url' => env('OPENAI_BASE_URL', 'https://api.openai.com/v1'),
+        'gemini_base_url' => env('GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com/v1beta'),
         // Terra balances policy-review quality, latency and cost. Use gpt-5.6-sol for highest-quality review.
-        'model' => env('MAXGUARD_AI_MODEL', 'gpt-5.6-terra'),
+        'model' => env('MAXGUARD_AI_MODEL', 'gemini-2.5-flash'),
         'reasoning_effort' => env('MAXGUARD_AI_REASONING_EFFORT', 'low'),
         'output_language' => env('MAXGUARD_AI_OUTPUT_LANGUAGE', 'English'),
         'max_input_chars' => (int) env('MAXGUARD_AI_MAX_INPUT_CHARS', 12_000),
@@ -45,6 +49,26 @@ return [
         'min_confidence' => (int) env('MAXGUARD_AI_MIN_CONFIDENCE', 70),
         'connect_timeout_seconds' => (int) env('MAXGUARD_AI_CONNECT_TIMEOUT', 10),
         'timeout_seconds' => (int) env('MAXGUARD_AI_TIMEOUT', 90),
+    ],
+
+    'sightengine' => [
+        'enabled' => (bool) env('SIGHTENGINE_ENABLED', false),
+        'endpoint' => env('SIGHTENGINE_ENDPOINT', 'https://api.sightengine.com/1.0/text/check.json'),
+        'api_user' => env('SIGHTENGINE_API_USER'),
+        'api_secret' => env('SIGHTENGINE_API_SECRET'),
+        'models' => env('SIGHTENGINE_MODELS', 'general,self-harm'),
+        'violation_threshold' => (float) env('SIGHTENGINE_VIOLATION_THRESHOLD', 0.55),
+        'max_input_chars' => (int) env('SIGHTENGINE_MAX_INPUT_CHARS', 20000),
+        'connect_timeout_seconds' => (int) env('SIGHTENGINE_CONNECT_TIMEOUT', 10),
+        'timeout_seconds' => (int) env('SIGHTENGINE_TIMEOUT', 45),
+    ],
+
+    'ga4' => [
+        'client_id' => env('GOOGLE_CLIENT_ID'),
+        'client_secret' => env('GOOGLE_CLIENT_SECRET'),
+        'redirect_uri' => env('GOOGLE_REDIRECT_URI'),
+        'traffic_days' => (int) env('MAXGUARD_GA4_TRAFFIC_DAYS', 7),
+        'max_rows' => (int) env('MAXGUARD_GA4_MAX_ROWS', 1000),
     ],
 
     'crawler' => [

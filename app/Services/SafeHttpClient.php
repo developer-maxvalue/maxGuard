@@ -20,6 +20,7 @@ class SafeHttpClient
     {
         $maxRedirects = (int) config('maxguard.crawler.max_redirects', 4);
         $current = $this->urls->normalize($url);
+        $redirectChain = [$current];
 
         for ($redirect = 0; $redirect <= $maxRedirects; $redirect++) {
             $ips = $this->validator->publicIps($current);
@@ -32,6 +33,10 @@ class SafeHttpClient
                 if ($next === null) {
                     throw new RuntimeException('The remote server returned an invalid redirect.');
                 }
+                if (in_array($next, $redirectChain, true)) {
+                    throw new RuntimeException('Redirect loop detected: '.implode(' -> ', array_merge($redirectChain, [$next])));
+                }
+                $redirectChain[] = $next;
                 $current = $next;
                 continue;
             }
@@ -46,7 +51,9 @@ class SafeHttpClient
             return new CrawlResponse($current, $response->status(), $body, $response->headers());
         }
 
-        throw new RuntimeException('Maximum redirect count exceeded.');
+        throw new RuntimeException(
+            "Maximum redirect count ({$maxRedirects}) exceeded: ".implode(' -> ', $redirectChain)
+        );
     }
 
     /** @param list<string> $ips */

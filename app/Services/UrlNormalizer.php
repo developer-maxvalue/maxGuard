@@ -69,6 +69,7 @@ final class UrlNormalizer
 
     private function normalizePath(string $path): string
     {
+        $hadTrailingSlash = $path !== '/' && str_ends_with($path, '/');
         $segments = [];
         foreach (explode('/', $path) as $segment) {
             if ($segment === '' || $segment === '.') {
@@ -84,8 +85,10 @@ final class UrlNormalizer
         }
 
         $normalized = '/'.implode('/', $segments);
+        if ($hadTrailingSlash && $normalized !== '/') {
+            $normalized .= '/';
+        }
 
         return $normalized === '' ? '/' : $normalized;
     }
 }
-

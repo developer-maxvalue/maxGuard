@@ -108,7 +108,7 @@ final class FindingController extends Controller
     public function show(Finding $finding): View
     {
         $this->authorizeOwner($finding);
-        $finding->load(['website', 'page', 'evidenceItems' => fn ($query) => $query->latest('captured_at')]);
+        $finding->load(['website', 'page.copyrightReviews', 'evidenceItems' => fn ($query) => $query->latest('captured_at')]);
         $signals = collect($finding->signals ?? [])->map(function ($value, string $key): array {
             return [
                 'label' => Str::headline($key),
@@ -133,6 +133,9 @@ final class FindingController extends Controller
             'actions' => $finding->remediation ?? ['Review the evidence and document the remediation decision.'],
             'timeline' => $timeline,
             'evidence' => $finding->evidenceItems,
+            'page_id' => $finding->page?->id,
+            'page_title' => $finding->page?->title,
+            'copyright_review' => $finding->page?->copyrightReviews->first(),
         ]]);
     }
 

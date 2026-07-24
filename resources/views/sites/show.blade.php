@@ -98,6 +98,38 @@
         </div>
     </div>
 
+    <div class="card mg-card mb-5">
+        <div class="card-header border-0 pt-2"><div class="card-title d-block">
+            <h2 class="mg-card-title">GA4 traffic · last 7 days</h2>
+            <p class="mg-card-subtitle">Priority scans follow this order from highest to lowest traffic.</p>
+        </div></div>
+        <div class="card-body pt-0">
+            @if (!$ga4)
+                <a class="btn btn-light-primary" href="{{ route('ga4.connect', $site['slug']) }}"><i class="bi bi-google me-2"></i>Connect Google Analytics</a>
+            @else
+                <form class="row g-3 align-items-end mb-5" method="POST" action="{{ route('ga4.update', $site['slug']) }}">
+                    @csrf @method('PATCH')
+                    <div class="col-md-5"><label class="form-label">GA4 property ID</label>
+                        <input class="form-control" name="property_id" value="{{ $ga4->property_id }}" placeholder="123456789" required>
+                    </div>
+                    <div class="col-auto"><button class="btn btn-light-primary">Save property</button></div>
+                </form>
+                @if ($ga4->property_id)
+                    <form method="POST" action="{{ route('ga4.sync', $site['slug']) }}" class="mb-5">@csrf
+                        <button class="btn btn-primary">Sync traffic now</button>
+                        <span class="text-muted ms-3">Last sync: {{ $ga4->last_synced_at?->diffForHumans() ?? 'never' }}</span>
+                    </form>
+                @endif
+                @foreach($trafficPages as $page)
+                    <div class="d-flex justify-content-between border-bottom py-2 gap-4">
+                        <span class="text-truncate" title="{{ $page->url }}">{{ $page->url }}</span>
+                        <strong>{{ number_format($page->ga4_views_7d) }} views</strong>
+                    </div>
+                @endforeach
+            @endif
+        </div>
+    </div>
+
     <div class="card mg-card">
         <div class="card-header border-0 pt-2">
             <div class="card-title d-block">

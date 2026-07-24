@@ -131,7 +131,7 @@
             var limitLabel = scan.is_sampled ? 'newest-post sample' : 'URL cap';
 
             return '<tr>' +
-                '<td class="fw-semibold">' + escapeHtml(scan.website) + '</td>' +
+                '<td><a class="fw-semibold" href="' + escapeHtml(scan.detail_url) + '">' + escapeHtml(scan.website) + '</a><a class="d-block fs-9 text-primary mt-1" href="' + escapeHtml(scan.detail_url) + '">View URL details →</a></td>' +
                 '<td>' + escapeHtml(scan.type) + '</td>' +
                 '<td>' + badge(scan.status) + sampleBadge + error + '</td>' +
                 '<td><div class="d-flex align-items-center gap-3"><div class="progress h-6px w-100px"><div class="progress-bar bg-primary" style="width:' + Number(scan.progress) + '%"></div></div><span>' + Number(scan.progress) + '%</span></div></td>' +
