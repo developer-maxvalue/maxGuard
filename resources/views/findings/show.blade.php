@@ -54,7 +54,7 @@
                 <div class="card-header border-0 pt-2">
                     <div class="card-title d-block">
                         <h2 class="mg-card-title">Captured page evidence</h2>
-                        <p class="mg-card-subtitle text-truncate mw-700px">{{ $finding['url'] }}</p>
+                        <p class="mg-card-subtitle text-truncate mw-700px"><a href="{{ $finding['url'] }}" target="_blank">{{ $finding['url'] }}</a> </p>
                     </div>
                     <div class="card-toolbar"><span class="badge badge-light-success"><i
                                 class="bi bi-shield-check me-1"></i>Immutable snapshot</span></div>

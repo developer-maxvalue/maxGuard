@@ -112,7 +112,7 @@ final class FindingController extends Controller
         $signals = collect($finding->signals ?? [])->map(function ($value, string $key): array {
             return [
                 'label' => Str::headline($key),
-                'value' => is_bool($value) ? ($value ? 'Yes' : 'No') : (is_scalar($value) ? (string) $value : 'Recorded'),
+                'value' => is_bool($value) ? ($value ? 'Yes' : 'No') : (is_scalar($value) ? (string) "<a href='{{ $value }}' target='_blank'>{{ $value }}" : 'Recorded'),
                 'detail' => 'Captured by the automated detector for this finding.',
             ];
         })->values()->all();
