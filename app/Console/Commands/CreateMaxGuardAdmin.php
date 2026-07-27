@@ -20,12 +20,12 @@ final class CreateMaxGuardAdmin extends Command
     {
         $name = trim((string) ($this->option('name') ?: $this->ask('Administrator name', 'MaxGuard Administrator')));
         $email = strtolower(trim((string) ($this->option('email') ?: $this->ask('Administrator email'))));
-        $password = (string) ($this->option('password') ?: $this->secret('Password (minimum 12 characters)'));
+        $password = (string) ($this->option('password') ?: $this->secret('Password'));
 
         $validator = Validator::make(compact('name', 'email', 'password'), [
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
-            'password' => ['required', 'string', 'min:12'],
+            'password' => ['required', 'string'],
         ]);
 
         if ($validator->fails()) {
