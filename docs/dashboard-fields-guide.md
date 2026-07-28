@@ -503,7 +503,45 @@ Giao diện cho phép chuyển trực tiếp theo các nút hiện có; backend 
 7. Badge component chưa có mapping màu riêng cho `remediating` và `reused`, nên các giá trị này dùng màu fallback.
 8. Một số chuỗi trong Blade đang có dấu hiệu sai encoding như `Â·` hoặc chữ Việt bị mojibake; đây là lỗi hiển thị văn bản, không thay đổi ý nghĩa dữ liệu.
 
-## 8. Nguồn code chính
+## 8. Module System Administration
+
+Màn hình: `/admin`
+
+Chỉ tài khoản có `is_admin = true` được truy cập. Admin nhìn thấy dữ liệu của tất cả owner trên cả trang quản trị và các màn Dashboard, Sites, Findings, Scan Center hiện hữu.
+
+### Chỉ số tổng quan
+
+| Chỉ số | Ý nghĩa |
+|---|---|
+| **Users** | Tổng tài khoản đăng ký. |
+| **Sites** | Tổng website của mọi owner. |
+| **Active scans** | Tổng scan đang queued hoặc running. |
+| **Open findings** | Finding toàn hệ thống đang open, investigating hoặc remediating. |
+| **Critical** | Finding critical đang mở trên toàn hệ thống. |
+| **Est. revenue** | Tổng Estimated monthly AdSense revenue do các owner nhập; không phải dữ liệu AdSense/GA4 thực tế. |
+
+Các bảng quản trị hiển thị 20 user mới nhất, 20 website điểm thấp nhất, 15 scan mới nhất và 15 finding đang mở có mức ưu tiên cao nhất.
+
+### Quyền admin
+
+- Truy cập dữ liệu Sites, Findings, Scans và Evidence của mọi owner.
+- Mở trang chi tiết và thực hiện các thao tác quản lý hiện có.
+- Xóa website của bất kỳ owner nào nếu website không có scan queued/running.
+- Tài khoản thường chỉ thấy và quản lý website thuộc chính mình.
+
+Lệnh `php artisan maxguard:create-admin` tạo tài khoản với `is_admin = true`. Khi migration quyền admin chạy trên một hệ thống cũ, tài khoản có ID nhỏ nhất được nâng thành admin để giữ quyền truy cập quản trị hiện hữu.
+
+### Xóa website
+
+Nút **Delete site** nằm trên trang chi tiết website.
+
+- Chỉ owner hoặc admin được xóa.
+- Không thể xóa khi website có scan `queued` hoặc `running`.
+- Khi xác nhận, hệ thống xóa website và cascade toàn bộ scans, pages, findings, scan targets, telemetry, GA4 connection và copyright reviews liên quan.
+- Evidence database records và các file evidence trong thư mục lưu trữ của website cũng bị xóa.
+- Đây là thao tác không thể hoàn tác từ giao diện.
+
+## 9. Nguồn code chính
 
 - `resources/views/dashboard/index.blade.php`
 - `resources/views/sites/index.blade.php`
@@ -517,6 +555,7 @@ Giao diện cho phép chuyển trực tiếp theo các nút hiện có; backend 
 - `app/Http/Controllers/SiteController.php`
 - `app/Http/Controllers/FindingController.php`
 - `app/Http/Controllers/ScanController.php`
+- `app/Http/Controllers/AdminController.php`
 - `app/Models/Website.php`
 - `app/Models/Finding.php`
 - `app/Models/Scan.php`

@@ -9,8 +9,8 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
-use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
@@ -44,7 +44,7 @@ final class FindingController extends Controller
         $query = $this->filteredQuery();
 
         return response()->streamDownload(function () use ($query): void {
-            $spreadsheet = new Spreadsheet();
+            $spreadsheet = new Spreadsheet;
             $sheet = $spreadsheet->getActiveSheet();
             $sheet->setTitle('Findings');
             $headers = [
@@ -210,7 +210,12 @@ final class FindingController extends Controller
 
     private function authorizeOwner(Finding $finding): void
     {
-        abort_if(auth()->id() !== null && $finding->website->user_id !== auth()->id(), 403);
+        abort_if(
+            auth()->id() !== null
+            && ! auth()->user()?->is_admin
+            && $finding->website->user_id !== auth()->id(),
+            403
+        );
     }
 
     private function exportCsv(Builder $query): StreamedResponse

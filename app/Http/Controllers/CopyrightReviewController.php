@@ -11,7 +11,12 @@ final class CopyrightReviewController extends Controller
     /** Persist the human decision made after an external Google search. */
     public function update(Request $request, Page $page): RedirectResponse
     {
-        abort_if(auth()->id() !== null && $page->website->user_id !== auth()->id(), 403);
+        abort_if(
+            auth()->id() !== null
+            && ! auth()->user()?->is_admin
+            && $page->website->user_id !== auth()->id(),
+            403
+        );
         $data = $request->validate([
             'status' => ['required', 'in:pending,clear,suspected,confirmed'],
             'matched_url' => ['nullable', 'url', 'max:2048'],

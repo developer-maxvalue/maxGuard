@@ -51,6 +51,12 @@
         <a class="mg-nav-link {{ request()->routeIs('scans.*') ? 'active' : '' }}" href="{{ route('scans.index') }}">
             <i class="bi bi-upc-scan"></i><span>Scan center</span>
         </a>
+        @if (auth()->user()?->is_admin)
+            <span class="mg-nav-label mt-5">Administration</span>
+            <a class="mg-nav-link {{ request()->routeIs('admin.*') ? 'active' : '' }}" href="{{ route('admin.index') }}">
+                <i class="bi bi-sliders"></i><span>System admin</span>
+            </a>
+        @endif
         <a class="mg-nav-link" href="{{ route('findings.index') }}">
             <i class="bi bi-file-earmark-check"></i><span>Evidence</span>
         </a>

@@ -36,11 +36,12 @@ final class CreateMaxGuardAdmin extends Command
             return self::FAILURE;
         }
 
-        $user = new User();
+        $user = new User;
         $user->forceFill([
             'name' => $name,
             'email' => $email,
             'password' => Hash::make($password),
+            'is_admin' => true,
         ])->save();
 
         $this->info("Administrator [{$email}] created. You can now sign in at /login.");

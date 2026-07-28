@@ -86,6 +86,10 @@ final class Website extends Model
 
     public function scopeAccessibleBy(Builder $query, ?int $userId): Builder
     {
+        if ($userId !== null && auth()->id() === $userId && auth()->user()?->is_admin) {
+            return $query;
+        }
+
         return $userId === null ? $query : $query->where('user_id', $userId);
     }
 

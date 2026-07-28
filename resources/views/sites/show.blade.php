@@ -31,6 +31,12 @@
                             class="bi bi-arrow-repeat me-2"></i>Rescan{{ $aiReady ? ' + AI' : '' }}</button>
                 </div>
             </form>
+            <form method="POST" action="{{ route('sites.destroy', $site['slug']) }}"
+                onsubmit="return confirm('Delete {{ addslashes($site['domain']) }} and all scans, pages, findings and evidence? This cannot be undone.')">
+                @csrf
+                @method('DELETE')
+                <button class="btn btn-light-danger"><i class="bi bi-trash me-2"></i>Delete site</button>
+            </form>
         </div>
     </div>
 

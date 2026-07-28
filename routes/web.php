@@ -1,11 +1,12 @@
 <?php
 
+use App\Http\Controllers\AdminController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\CopyrightReviewController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EvidenceController;
 use App\Http\Controllers\FindingController;
 use App\Http\Controllers\Ga4Controller;
-use App\Http\Controllers\CopyrightReviewController;
 use App\Http\Controllers\ScanController;
 use App\Http\Controllers\SiteController;
 use Illuminate\Support\Facades\Route;
@@ -31,6 +32,7 @@ Route::middleware(config('maxguard.route_middleware', ['auth']))->group(function
     Route::get('/sites', [SiteController::class, 'index'])->name('sites.index');
     Route::post('/sites', [SiteController::class, 'store'])->name('sites.store');
     Route::get('/sites/{site}', [SiteController::class, 'show'])->name('sites.show');
+    Route::delete('/sites/{site}', [SiteController::class, 'destroy'])->name('sites.destroy');
     Route::get('/sites/{site}/ga4/connect', [Ga4Controller::class, 'connect'])->name('ga4.connect');
     Route::patch('/sites/{site}/ga4', [Ga4Controller::class, 'update'])->name('ga4.update');
     Route::post('/sites/{site}/ga4/sync', [Ga4Controller::class, 'sync'])->name('ga4.sync');
@@ -48,6 +50,8 @@ Route::middleware(config('maxguard.route_middleware', ['auth']))->group(function
     Route::get('/scan-center/{scan}', [ScanController::class, 'show'])->name('scans.show');
     Route::get('/scan-center/{scan}/live', [ScanController::class, 'targetsLive'])->name('scans.targets.live');
     Route::get('/scan-center/{scan}/targets/{target}', [ScanController::class, 'target'])->name('scans.targets.show');
+
+    Route::get('/admin', AdminController::class)->middleware('admin')->name('admin.index');
 });
 
 Route::get('/integrations/ga4/callback', [Ga4Controller::class, 'callback'])

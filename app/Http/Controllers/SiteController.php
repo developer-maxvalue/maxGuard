@@ -4,10 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreWebsiteRequest;
 use App\Models\Finding;
+use App\Models\Scan;
 use App\Models\Website;
 use App\Services\UrlNormalizer;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -61,7 +64,7 @@ final class SiteController extends Controller
 
     public function show(Website $site): View
     {
-        abort_if(auth()->id() !== null && $site->user_id !== auth()->id(), 403);
+        $this->authorizeOwner($site);
         $site->load([
             'ga4Connection',
             'findings' => fn ($query) => $query->open()->with('page'),
@@ -94,7 +97,9 @@ final class SiteController extends Controller
         }
 
         $riskUrls = $site->findings
-            ->sortBy(fn (Finding $finding): int => match ($finding->severity) {'critical' => 1, 'high' => 2, 'review' => 3, default => 4})
+            ->sortBy(fn (Finding $finding): int => match ($finding->severity) {
+                'critical' => 1, 'high' => 2, 'review' => 3, default => 4
+            })
             ->take(10)
             ->map(fn (Finding $finding): array => [
                 'finding_id' => $finding->public_id,
@@ -114,6 +119,40 @@ final class SiteController extends Controller
             'ga4' => $site->ga4Connection,
             'trafficPages' => $site->pages()->where('ga4_views_7d', '>', 0)->orderByDesc('ga4_views_7d')->limit(20)->get(),
         ]);
+    }
+
+    public function destroy(Website $site): RedirectResponse
+    {
+        $this->authorizeOwner($site);
+
+        if ($site->scans()->whereIn('status', [Scan::STATUS_QUEUED, Scan::STATUS_RUNNING])->exists()) {
+            return back()->withErrors([
+                'site' => 'Cannot delete this website while a scan is queued or running.',
+            ]);
+        }
+
+        $evidenceFiles = $site->findings()
+            ->with('evidenceItems:id,finding_id,disk,path')
+            ->get()
+            ->flatMap(fn (Finding $finding) => $finding->evidenceItems)
+            ->map(fn ($evidence): array => ['disk' => $evidence->disk, 'path' => $evidence->path])
+            ->all();
+        $siteId = $site->id;
+        $domain = $site->domain;
+
+        DB::transaction(fn () => $site->delete());
+
+        foreach ($evidenceFiles as $file) {
+            Storage::disk($file['disk'])->delete($file['path']);
+        }
+        $disk = (string) config('maxguard.evidence_disk', 'local');
+        $prefix = trim((string) config('maxguard.evidence_prefix', 'maxguard/evidence'), '/');
+        Storage::disk($disk)->deleteDirectory("{$prefix}/website-{$siteId}");
+
+        return redirect()->route('sites.index')->with(
+            'status',
+            "Website {$domain} and its scans, pages, findings and evidence were deleted."
+        );
     }
 
     private function row(Website $website): array
@@ -153,6 +192,16 @@ final class SiteController extends Controller
         }
 
         return $slug;
+    }
+
+    private function authorizeOwner(Website $website): void
+    {
+        abort_if(
+            auth()->id() !== null
+            && ! auth()->user()?->is_admin
+            && $website->user_id !== auth()->id(),
+            403
+        );
     }
 
     private function exportCsv(Builder $query): StreamedResponse

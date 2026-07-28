@@ -8,8 +8,8 @@ use App\Models\Scan;
 use App\Models\ScanTarget;
 use App\Models\Website;
 use App\Services\ScanDispatcher;
-use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
 
 final class ScanController extends Controller
@@ -202,7 +202,12 @@ final class ScanController extends Controller
     private function authorizeScan(Scan $scan): void
     {
         $scan->loadMissing('website');
-        abort_if(auth()->id() !== null && $scan->website->user_id !== auth()->id(), 403);
+        abort_if(
+            auth()->id() !== null
+            && ! auth()->user()?->is_admin
+            && $scan->website->user_id !== auth()->id(),
+            403
+        );
     }
 
     public function live(): JsonResponse

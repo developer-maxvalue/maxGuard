@@ -10,7 +10,12 @@ final class EvidenceController extends Controller
 {
     public function download(EvidenceItem $evidence): StreamedResponse
     {
-        abort_if(auth()->id() !== null && $evidence->finding->website->user_id !== auth()->id(), 403);
+        abort_if(
+            auth()->id() !== null
+            && ! auth()->user()?->is_admin
+            && $evidence->finding->website->user_id !== auth()->id(),
+            403
+        );
         abort_unless(Storage::disk($evidence->disk)->exists($evidence->path), 404);
         $stream = Storage::disk($evidence->disk)->readStream($evidence->path);
         abort_if($stream === false, 404);
