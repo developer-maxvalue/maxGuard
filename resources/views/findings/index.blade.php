@@ -135,7 +135,7 @@
                 </table>
             </div>
             @if (method_exists($findings, 'links'))
-                <div class="mt-5">{{ $findings->links() }}</div>
+                <div class="mt-5">{{ $findings->links('pagination::bootstrap-5') }}</div>
             @endif
         </div>
     </div>
