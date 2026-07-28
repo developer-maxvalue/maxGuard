@@ -121,20 +121,20 @@
                             <div class="mg-mini-stat"><strong>{{ $scanStats['target_queued'] }}</strong><span>URLs waiting</span></div>
                         </div>
                     </div>
-                    <div class="mt-5 p-4 rounded bg-light-primary">
-                        @if ($queueInfo['driver'] === 'sync')
-                            <div class="mg-eyebrow mb-2">Synchronous queue</div>
-                            <span class="d-block fs-8 text-muted">No worker is required, but long scans can time out.
-                                Database or Redis queue is recommended.</span>
-                        @else
-                            <div class="mg-eyebrow mb-2">1 control worker</div>
-                            <code class="d-block text-break">{{ $queueInfo['control_worker_command'] }}</code>
-                            <div class="mg-eyebrow mb-2 mt-4">{{ $queueInfo['page_workers'] }} parallel page workers</div>
-                            <code class="d-block text-break">{{ $queueInfo['page_worker_command'] }}</code>
-                            <span class="d-block fs-9 text-muted mt-2">Run the page command in
-                                {{ $queueInfo['page_workers'] }} processes, preferably with Supervisor.</span>
-                        @endif
-                    </div>
+{{--                    <div class="mt-5 p-4 rounded bg-light-primary">--}}
+{{--                        @if ($queueInfo['driver'] === 'sync')--}}
+{{--                            <div class="mg-eyebrow mb-2">Synchronous queue</div>--}}
+{{--                            <span class="d-block fs-8 text-muted">No worker is required, but long scans can time out.--}}
+{{--                                Database or Redis queue is recommended.</span>--}}
+{{--                        @else--}}
+{{--                            <div class="mg-eyebrow mb-2">1 control worker</div>--}}
+{{--                            <code class="d-block text-break">{{ $queueInfo['control_worker_command'] }}</code>--}}
+{{--                            <div class="mg-eyebrow mb-2 mt-4">{{ $queueInfo['page_workers'] }} parallel page workers</div>--}}
+{{--                            <code class="d-block text-break">{{ $queueInfo['page_worker_command'] }}</code>--}}
+{{--                            <span class="d-block fs-9 text-muted mt-2">Run the page command in--}}
+{{--                                {{ $queueInfo['page_workers'] }} processes, preferably with Supervisor.</span>--}}
+{{--                        @endif--}}
+{{--                    </div>--}}
                 </div>
             </div>
             <div class="card mg-card">
