@@ -7,7 +7,9 @@ use App\Models\Finding;
 use App\Models\Scan;
 use App\Models\ScanTarget;
 use App\Models\Website;
+use App\Services\AiConfiguration;
 use App\Services\ScanDispatcher;
+use App\Support\UiText;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
@@ -17,7 +19,7 @@ final class ScanController extends Controller
     /**
      * Render the scan center with queue capacity and recent portfolio activity.
      */
-    public function index(): View
+    public function index(AiConfiguration $aiConfiguration): View
     {
         $visibleScans = Scan::query()->whereHas('website', fn ($query) => $query->accessibleBy(auth()->id()));
         $running = (clone $visibleScans)->where('status', Scan::STATUS_RUNNING)->count();
@@ -55,7 +57,7 @@ final class ScanController extends Controller
                 'utilization' => min(100, (int) round(($runningTargets / max(1, $pageWorkers * $batchSize)) * 100)),
             ],
             'aiInfo' => [
-                'ready' => (bool) config('maxguard.ai.enabled') && filled(config('maxguard.ai.api_key')),
+                'ready' => $aiConfiguration->isReady(),
                 'model' => (string) config('maxguard.ai.model', 'gpt-5.6-terra'),
                 'page_limit' => (int) config('maxguard.ai.max_pages_per_scan', 100),
             ],
@@ -160,7 +162,7 @@ final class ScanController extends Controller
 
         $websites = $query->get();
         if ($websites->isEmpty()) {
-            return back()->withErrors(['site' => 'Website not found.'])->withInput();
+            return back()->withErrors(['site' => 'Không tìm thấy website.'])->withInput();
         }
 
         $queued = 0;
@@ -183,16 +185,16 @@ final class ScanController extends Controller
 
         if ($queued === 0) {
             return back()->withErrors([
-                'queue' => $skipped[0] ?? 'No scan was queued. Run [php artisan maxguard:queue-doctor] to check the queue configuration.',
+                'queue' => $skipped[0] ?? 'Không có lượt quét nào được đưa vào hàng đợi. Chạy [php artisan maxguard:queue-doctor] để kiểm tra cấu hình hàng đợi.',
             ])->withInput();
         }
 
         $response = redirect()
             ->route('scans.index')
-            ->with('status', "{$queued} scan(s) queued successfully.");
+            ->with('status', "Đã đưa {$queued} lượt quét vào hàng đợi.");
 
         if ($skipped !== []) {
-            $response->with('error', count($skipped).' scan(s) were skipped: '.$skipped[0]);
+            $response->with('error', 'Đã bỏ qua '.count($skipped).' lượt quét: '.$skipped[0]);
         }
 
         return $response;
@@ -254,7 +256,14 @@ final class ScanController extends Controller
             'id' => $scan->id,
             'detail_url' => route('scans.show', $scan),
             'website' => $scan->website->domain,
-            'type' => ucfirst($scan->type),
+            'type' => match ($scan->type) {
+                'full' => 'Toàn diện',
+                'priority' => 'Ưu tiên',
+                'copyright' => 'Bản quyền',
+                'ads' => 'Quảng cáo',
+                'privacy' => 'Quyền riêng tư',
+                default => $scan->type,
+            },
             'status' => $scan->status,
             'progress' => $scan->progress,
             'pages_scanned' => $scan->pages_scanned,
@@ -296,12 +305,12 @@ final class ScanController extends Controller
             'scan_id' => $finding->scan_id,
             'website' => $finding->website->domain,
             'url' => $finding->page?->url ?? $finding->website->start_url,
-            'title' => $finding->title,
-            'category' => $finding->category,
+            'title' => UiText::text($finding->title),
+            'category' => UiText::label($finding->category),
             'severity' => $finding->severity,
             'confidence' => $finding->confidence,
             'status' => $finding->status,
-            'source' => str_starts_with($finding->rule_key, 'ai.') ? 'AI' : 'Rules',
+            'source' => str_starts_with($finding->rule_key, 'ai.') ? 'AI' : 'Quy tắc',
             'detected' => $finding->last_seen_at->diffForHumans(),
             'detail_url' => route('findings.show', $finding),
         ];

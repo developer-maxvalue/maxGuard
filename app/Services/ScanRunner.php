@@ -22,10 +22,8 @@ final class ScanRunner
         private WebsiteCrawler $crawler,
         private DetectorRegistry $detectors,
         private AiPolicyAnalyzer $ai,
-        private EvidenceStore $evidence,
         private RiskScoreCalculator $riskScore,
-    ) {
-    }
+    ) {}
 
     /**
      * Discover the requested sample once, persist it, then fan the work out to
@@ -35,6 +33,7 @@ final class ScanRunner
      */
     public function dispatchParallel(Scan $scan): void
     {
+        app(AiConfiguration::class)->apply();
         $scan->refresh();
         if (in_array($scan->status, [Scan::STATUS_COMPLETED, Scan::STATUS_PARTIAL, Scan::STATUS_CANCELLED], true)) {
             return;
@@ -106,6 +105,7 @@ final class ScanRunner
     /** @param list<int> $targetIds */
     public function runParallelBatch(int $scanId, array $targetIds, string $claimToken): void
     {
+        app(AiConfiguration::class)->apply();
         $scan = Scan::query()->with('website')->findOrFail($scanId);
         if (in_array($scan->status, [Scan::STATUS_COMPLETED, Scan::STATUS_PARTIAL, Scan::STATUS_CANCELLED, Scan::STATUS_FAILED], true)) {
             return;
@@ -194,6 +194,7 @@ final class ScanRunner
 
     public function finalizeParallel(int $scanId): bool
     {
+        app(AiConfiguration::class)->apply();
         $scan = Scan::query()->with('website')->findOrFail($scanId);
         if (in_array($scan->status, [Scan::STATUS_COMPLETED, Scan::STATUS_PARTIAL, Scan::STATUS_CANCELLED, Scan::STATUS_FAILED], true)) {
             return true;
@@ -237,8 +238,7 @@ final class ScanRunner
                 continue;
             }
             foreach ($this->detectors->analyzeDuplicateSketch($target->page->url, $sketch, $scan->type) as $result) {
-                $finding = $this->persistFindingForUrl($scan, $scan->website, $target->page, $target->page->url, $result);
-                $this->evidence->attachSignalOnly($finding, $scan, $target->page->url, $result);
+                $this->persistFindingForUrl($scan, $scan->website, $target->page, $target->page->url, $result);
             }
         }
 
@@ -267,12 +267,14 @@ final class ScanRunner
         }
 
         $this->completeParallel($scan, $successfulTargets->count());
+        $this->generateSiteAssessment($scan->fresh());
 
         return true;
     }
 
     public function run(Scan $scan): void
     {
+        app(AiConfiguration::class)->apply();
         $scan->refresh();
         if (in_array($scan->status, [Scan::STATUS_COMPLETED, Scan::STATUS_CANCELLED], true)) {
             return;
@@ -368,18 +370,10 @@ final class ScanRunner
                     }
                 }
 
-                $snapshotPath = $results === [] ? null : $this->evidence->storePageSnapshot($scan, $page, $document);
-                if ($snapshotPath !== null) {
-                    $page->update(['snapshot_path' => $snapshotPath]);
-                }
-
                 foreach ($results as $result) {
                     $finding = $this->persistFinding($scan, $website, $page, $document, $result);
                     $seen[] = $finding->fingerprint;
                     $scanFindingIds[$finding->id] = true;
-                    if ($snapshotPath !== null) {
-                        $this->evidence->attach($finding, $scan, $document, $snapshotPath, $result);
-                    }
                 }
 
                 $this->markPageAnalyzed($page, $scan, $aiAnalyzedThisPage);
@@ -405,6 +399,7 @@ final class ScanRunner
 
             $this->resolveMissingFindings($scan, $website, $startedAt, $seen, $scannedPageIds, $aiScannedPageIds);
             $this->complete($scan, $website, $scanned, $plan);
+            $this->generateSiteAssessment($scan->fresh());
         } catch (Throwable $exception) {
             $scan->update([
                 'status' => Scan::STATUS_FAILED,
@@ -421,8 +416,8 @@ final class ScanRunner
     private function processParallelDocument(Scan $scan, ScanTarget $target, PageDocument $document): void
     {
         $telemetry = app(ScanTelemetry::class);
-        $crawlStarted = $telemetry->start($target, 'crawl', 'crawler', 'HTML document downloaded and parsed.');
-        $telemetry->finish($target, 'crawl', $crawlStarted, 'success', 'Crawl completed.', [
+        $crawlStarted = $telemetry->start($target, 'crawl', 'trình thu thập', 'Đã tải xuống và phân tích tài liệu HTML.');
+        $telemetry->finish($target, 'crawl', $crawlStarted, 'success', 'Đã hoàn tất thu thập dữ liệu.', [
             'http_status' => $document->statusCode,
             'word_count' => $document->wordCount,
             'language' => $document->language,
@@ -443,8 +438,8 @@ final class ScanRunner
         );
 
         if ($reuseAnalysis) {
-            $reuseStarted = $telemetry->start($target, 'reuse', 'incremental-cache', 'Checking prior content analysis.');
-            $telemetry->finish($target, 'reuse', $reuseStarted, 'reused', 'Content hash and analysis contract are unchanged; paid analyzers were skipped.', [
+            $reuseStarted = $telemetry->start($target, 'reuse', 'bộ nhớ đệm tăng dần', 'Đang kiểm tra kết quả phân tích nội dung trước đó.');
+            $telemetry->finish($target, 'reuse', $reuseStarted, 'reused', 'Mã băm nội dung và cấu hình phân tích không thay đổi; đã bỏ qua các bộ phân tích tính phí.', [
                 'content_hash' => $document->contentHash(),
                 'last_scan_id' => $existingPage?->last_scan_id,
             ]);
@@ -463,15 +458,15 @@ final class ScanRunner
 
         // Local rules run first; the external moderation result is normalized
         // into the same finding format and therefore appears on the same URL.
-        $localStarted = $telemetry->start($target, 'local_rules', 'MaxGuard local detectors', 'Running duplicate, warning phrase, copyright, quality, ads, privacy and technical rules.');
+        $localStarted = $telemetry->start($target, 'local_rules', 'Bộ phát hiện cục bộ MaxGuard', 'Đang chạy các quy tắc về trùng lặp, cụm từ cảnh báo, bản quyền, chất lượng, quảng cáo, quyền riêng tư và kỹ thuật.');
         $localResults = $this->detectors->analyze($document, $scan->type, false);
-        $telemetry->finish($target, 'local_rules', $localStarted, 'success', count($localResults).' local finding(s).', [
+        $telemetry->finish($target, 'local_rules', $localStarted, 'success', count($localResults).' phát hiện từ quy tắc cục bộ.', [
             'findings_count' => count($localResults),
             'rules' => array_values(array_map(fn (DetectorResult $result): string => $result->ruleKey, $localResults)),
         ]);
 
         $sightengine = app(SightengineTextAnalyzer::class);
-        $thirdPartyStarted = $telemetry->start($target, 'sightengine', 'Sightengine', 'Submitting page text to third-party moderation.');
+        $thirdPartyStarted = $telemetry->start($target, 'sightengine', 'Sightengine', 'Đang gửi văn bản trang đến dịch vụ kiểm duyệt bên thứ ba.');
         $thirdPartyResults = $sightengine->analyze($document);
         $thirdPartyTrace = $sightengine->lastTrace();
         $thirdPartyStatus = isset($thirdPartyTrace['error']) ? 'failed' : (($thirdPartyTrace['attempted'] ?? false) ? 'success' : 'skipped');
@@ -485,7 +480,7 @@ final class ScanRunner
             $thirdPartyStatus,
             isset($thirdPartyTrace['error'])
                 ? (string) $thirdPartyTrace['error']
-                : ((string) ($thirdPartyTrace['skipped_reason'] ?? count($thirdPartyResults).' moderation finding(s).')),
+                : ((string) ($thirdPartyTrace['skipped_reason'] ?? count($thirdPartyResults).' phát hiện kiểm duyệt.')),
             $thirdPartyTrace + ['findings_count' => count($thirdPartyResults)],
         );
         $results = array_merge($localResults, $thirdPartyResults);
@@ -498,12 +493,12 @@ final class ScanRunner
 
         if ($target->ai_attempted) {
             $aiAttempted = true;
-            $aiError = 'Previous AI attempt was interrupted; it was not repeated to avoid duplicate API cost.';
+            $aiError = 'Lần thử AI trước bị gián đoạn; hệ thống không thử lại để tránh phát sinh chi phí API trùng lặp.';
             $externalErrors[] = 'AI: '.$aiError;
         } elseif ($this->reserveParallelAi($scan->id)) {
             $target->update(['ai_attempted' => true]);
             $aiAttempted = true;
-            $aiStarted = $telemetry->start($target, 'gemini', 'Gemini', 'Submitting normalized page content for semantic policy review.');
+            $aiStarted = $telemetry->start($target, 'gemini', 'Gemini', 'Đang gửi nội dung trang đã chuẩn hóa để xem xét chính sách theo ngữ nghĩa.');
             $outcome = $this->ai->analyze($document);
             $aiInputTokens = $outcome->inputTokens;
             $aiOutputTokens = $outcome->outputTokens;
@@ -522,7 +517,7 @@ final class ScanRunner
                 'gemini',
                 $aiStarted,
                 ! $outcome->attempted ? 'skipped' : ($outcome->error === null ? 'success' : 'failed'),
-                $outcome->error ?? $aiFindings.' AI finding(s).',
+                $outcome->error ?? $aiFindings.' phát hiện từ AI.',
                 [
                     'request_id' => $outcome->responseId,
                     'http_status' => $outcome->httpStatus,
@@ -533,20 +528,12 @@ final class ScanRunner
                 ],
             );
         } else {
-            $aiStarted = $telemetry->start($target, 'gemini', 'Gemini', 'Checking whether AI review is enabled and within its page limit.');
-            $telemetry->finish($target, 'gemini', $aiStarted, 'skipped', 'AI review disabled, unconfigured, or page limit reached.');
-        }
-
-        $snapshotPath = $results === [] ? null : $this->evidence->storePageSnapshot($scan, $page, $document);
-        if ($snapshotPath !== null) {
-            $page->update(['snapshot_path' => $snapshotPath]);
+            $aiStarted = $telemetry->start($target, 'gemini', 'Gemini', 'Đang kiểm tra AI đã bật và còn trong giới hạn số trang hay không.');
+            $telemetry->finish($target, 'gemini', $aiStarted, 'skipped', 'AI chưa bật, chưa được cấu hình hoặc đã đạt giới hạn số trang.');
         }
 
         foreach ($results as $result) {
-            $finding = $this->persistFinding($scan, $website, $page, $document, $result);
-            if ($snapshotPath !== null) {
-                $this->evidence->attach($finding, $scan, $document, $snapshotPath, $result);
-            }
+            $this->persistFinding($scan, $website, $page, $document, $result);
         }
 
         $this->markPageAnalyzed($page, $scan, $aiAnalyzed);
@@ -629,7 +616,7 @@ final class ScanRunner
 
     private function failTarget(ScanTarget $target, string $message): void
     {
-        $started = app(ScanTelemetry::class)->start($target, 'pipeline', 'ScanRunner', 'URL processing failed before the pipeline could finish.');
+        $started = app(ScanTelemetry::class)->start($target, 'pipeline', 'Trình chạy quét', 'Xử lý URL thất bại trước khi quy trình hoàn tất.');
         app(ScanTelemetry::class)->finish($target, 'pipeline', $started, 'failed', $message);
         ScanTarget::query()
             ->whereKey($target->id)
@@ -861,8 +848,7 @@ final class ScanRunner
         PageDocument $document,
         ?array $analysisMarker = null,
         ?array $duplicateSketch = null,
-    ): Page
-    {
+    ): Page {
         $hash = hash('sha256', $document->url);
         $meta = $document->meta;
         if ($analysisMarker !== null) {
@@ -980,7 +966,6 @@ final class ScanRunner
             'title' => $result->title,
             'summary' => $result->summary,
             'policy_reference' => $result->policyReference,
-            'revenue_impact' => $this->revenueImpact($website, $result->severity),
             'signals' => $result->signals,
             'remediation' => $result->remediation,
             'first_seen_at' => $firstSeen,
@@ -1000,8 +985,7 @@ final class ScanRunner
         array $seen,
         array $scannedPageIds,
         array $aiScannedPageIds,
-    ): void
-    {
+    ): void {
         $categories = match ($scan->type) {
             'copyright' => ['Copyright', 'Duplicate content'],
             'ads' => ['Ad experience'],
@@ -1101,16 +1085,23 @@ final class ScanRunner
         });
     }
 
-    private function revenueImpact(Website $website, string $severity): float
+    private function generateSiteAssessment(Scan $scan): void
     {
-        $factor = match ($severity) {
-            'critical' => 0.25,
-            'high' => 0.12,
-            'review' => 0.04,
-            default => 0.01,
-        };
+        if (! app(AiConfiguration::class)->isReady()) {
+            return;
+        }
 
-        return round((float) $website->expected_monthly_revenue * $factor, 2);
+        try {
+            app(WebsiteAiReviewer::class)->reviewAndStore($scan);
+        } catch (Throwable $exception) {
+            report($exception);
+            $scan->update([
+                'meta' => array_merge((array) $scan->meta, [
+                    'ai_assessment_error' => mb_substr($exception->getMessage(), 0, 1000),
+                    'ai_assessment_failed_at' => now()->toIso8601String(),
+                ]),
+            ]);
+        }
     }
 
     /**

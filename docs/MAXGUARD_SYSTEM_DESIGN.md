@@ -136,7 +136,7 @@ flowchart TB
 | External analyzer | `SightengineTextAnalyzer`, `AiPolicyAnalyzer` | Chuẩn hóa kết quả external thành `DetectorResult` |
 | GA4 | `Ga4Controller`, `Ga4TrafficService` | OAuth, refresh token, sync traffic |
 | Findings | `FindingController`, `RiskScoreCalculator` | Upsert finding, workflow, score |
-| Evidence | `EvidenceStore`, `EvidenceItem` | Snapshot, hash, private storage |
+| Finding context | `Finding.signals` | Câu trích dẫn, URL đối chiếu và chỉ số detector trong database |
 | Telemetry | `ScanTelemetry`, `ScanTargetEvent` | Timeline stage, debug từng URL |
 | Export | CSV/XLSX export | Xuất báo cáo cho vận hành/khách hàng |
 

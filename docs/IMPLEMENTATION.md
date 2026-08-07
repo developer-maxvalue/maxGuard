@@ -26,7 +26,7 @@ Phần HTML crawler, detector, queue và evidence đã có trong gói. Browser r
 
 - `id`, `user_id`, `domain`, `start_url`.
 - `status`, `overall_score`, `last_scanned_at`.
-- `expected_monthly_revenue`, `pages_count`, `open_findings_count`.
+- `pages_count`, `open_findings_count`.
 - `settings` JSON cho cấu hình crawl theo website.
 
 ### `scans`
@@ -47,7 +47,7 @@ Phần HTML crawler, detector, queue và evidence đã có trong gói. Browser r
 
 - `website_id`, `scan_id`, `page_id`, `rule_key`.
 - `category`, `severity`, `confidence`, `status`.
-- `title`, `summary`, `policy_reference`, `revenue_impact`.
+- `title`, `summary`, `policy_reference`.
 - `first_seen_at`, `last_seen_at`, `resolved_at`, `assigned_to`.
 
 ### `evidence_items`
@@ -259,7 +259,7 @@ Health checks cần bao phủ HTTP app, database, Redis, object storage, rendere
 
 - Website CRUD cơ bản, manual/scheduled scan.
 - Safe HTML crawler, policy detectors cơ bản.
-- Database, queue, dashboard, live findings report, Excel export và private evidence download.
+- Database, queue, dashboard, live findings report và Excel export.
 - Semantic AI review tùy chọn, per-scan URL cap và live scanned/discovered/current URL progress.
 
 ### Bổ sung trước khi bán SaaS đa tenant

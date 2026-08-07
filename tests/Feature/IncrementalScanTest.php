@@ -8,7 +8,6 @@ use App\Models\Scan;
 use App\Models\Website;
 use App\Services\AiPolicyAnalyzer;
 use App\Services\DetectorRegistry;
-use App\Services\EvidenceStore;
 use App\Services\PageInspector;
 use App\Services\RiskScoreCalculator;
 use App\Services\SafeHttpClient;
@@ -115,7 +114,6 @@ final class IncrementalScanTest extends TestCase
             $crawler,
             new DetectorRegistry(),
             new AiPolicyAnalyzer(),
-            new EvidenceStore(),
             new RiskScoreCalculator(),
         );
     }

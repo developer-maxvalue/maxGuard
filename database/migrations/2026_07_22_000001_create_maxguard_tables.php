@@ -17,7 +17,6 @@ return new class extends Migration
             $table->text('start_url');
             $table->string('status', 32)->default('pending')->index();
             $table->unsignedTinyInteger('overall_score')->default(100);
-            $table->decimal('expected_monthly_revenue', 12, 2)->default(0);
             $table->unsignedInteger('pages_count')->default(0);
             $table->unsignedInteger('open_findings_count')->default(0);
             $table->timestamp('last_scanned_at')->nullable()->index();
@@ -84,7 +83,6 @@ return new class extends Migration
             $table->string('title');
             $table->text('summary');
             $table->text('policy_reference')->nullable();
-            $table->decimal('revenue_impact', 12, 2)->default(0);
             $table->json('signals')->nullable();
             $table->json('remediation')->nullable();
             $table->timestamp('first_seen_at');

@@ -22,7 +22,7 @@ final class AdminController extends Controller
                 ])->count(),
                 'open_findings' => Finding::query()->open()->count(),
                 'critical_findings' => Finding::query()->open()->where('severity', 'critical')->count(),
-                'monthly_revenue' => Website::query()->sum('expected_monthly_revenue'),
+                'sites_reviewed_by_ai' => Scan::query()->whereNotNull('ai_assessed_at')->distinct('website_id')->count('website_id'),
             ],
             'users' => User::query()
                 ->withCount('websites')

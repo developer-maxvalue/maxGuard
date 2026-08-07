@@ -1,10 +1,10 @@
 <?php
 
 use App\Http\Controllers\AdminController;
+use App\Http\Controllers\AiSettingController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CopyrightReviewController;
 use App\Http\Controllers\DashboardController;
-use App\Http\Controllers\EvidenceController;
 use App\Http\Controllers\FindingController;
 use App\Http\Controllers\Ga4Controller;
 use App\Http\Controllers\ScanController;
@@ -32,6 +32,7 @@ Route::middleware(config('maxguard.route_middleware', ['auth']))->group(function
     Route::get('/sites', [SiteController::class, 'index'])->name('sites.index');
     Route::post('/sites', [SiteController::class, 'store'])->name('sites.store');
     Route::get('/sites/{site}', [SiteController::class, 'show'])->name('sites.show');
+    Route::post('/sites/{site}/ai-assessment', [SiteController::class, 'assess'])->name('sites.ai-assessment');
     Route::delete('/sites/{site}', [SiteController::class, 'destroy'])->name('sites.destroy');
     Route::get('/sites/{site}/ga4/connect', [Ga4Controller::class, 'connect'])->name('ga4.connect');
     Route::patch('/sites/{site}/ga4', [Ga4Controller::class, 'update'])->name('ga4.update');
@@ -41,7 +42,6 @@ Route::middleware(config('maxguard.route_middleware', ['auth']))->group(function
     Route::get('/findings/export/xlsx', [FindingController::class, 'exportXlsx'])->name('findings.export.xlsx');
     Route::get('/findings/{finding}', [FindingController::class, 'show'])->name('findings.show');
     Route::patch('/findings/{finding}', [FindingController::class, 'update'])->name('findings.update');
-    Route::get('/evidence/{evidence}/download', [EvidenceController::class, 'download'])->name('evidence.download');
     Route::patch('/pages/{page}/copyright-review', [CopyrightReviewController::class, 'update'])->name('copyright-reviews.update');
 
     Route::get('/scan-center', [ScanController::class, 'index'])->name('scans.index');
@@ -52,6 +52,8 @@ Route::middleware(config('maxguard.route_middleware', ['auth']))->group(function
     Route::get('/scan-center/{scan}/targets/{target}', [ScanController::class, 'target'])->name('scans.targets.show');
 
     Route::get('/admin', AdminController::class)->middleware('admin')->name('admin.index');
+    Route::get('/admin/ai-settings', [AiSettingController::class, 'index'])->middleware('admin')->name('admin.ai-settings.index');
+    Route::patch('/admin/ai-settings', [AiSettingController::class, 'update'])->middleware('admin')->name('admin.ai-settings.update');
 });
 
 Route::get('/integrations/ga4/callback', [Ga4Controller::class, 'callback'])

@@ -14,6 +14,7 @@ final class PageInspectorTest extends TestCase
         <html lang="en"><head><title>Example article</title></head><body>
         <h1>Example article</h1><p>This is original readable article text.</p>
         <a href="/privacy">Privacy policy</a><a href="/about">About</a><a href="/contact">Contact</a>
+        <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
         <ins class="adsbygoogle" data-ad-client="ca-pub-1"></ins><img src="https://cdn.example.net/photo.jpg" alt="Photo">
         </body></html>
         HTML;
@@ -22,9 +23,9 @@ final class PageInspectorTest extends TestCase
 
         $this->assertSame('Example article', $page->title);
         $this->assertSame(1, $page->h1Count);
-        $this->assertSame(1, $page->adCount);
+        $this->assertSame(2, $page->adCount);
         $this->assertTrue($page->meta['has_privacy_link']);
         $this->assertSame(1, $page->meta['external_images']);
+        $this->assertSame(['https://cdn.example.net/photo.jpg'], $page->meta['external_image_urls']);
     }
 }
-

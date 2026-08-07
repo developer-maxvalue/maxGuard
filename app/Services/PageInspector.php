@@ -41,7 +41,7 @@ final class PageInspector
             }
         }
 
-        $adQuery = '//*[contains(concat(" ", normalize-space(@class), " "), " adsbygoogle ") or @data-ad-client or @data-ad-slot or contains(translate(@id,"ABCDEFGHIJKLMNOPQRSTUVWXYZ","abcdefghijklmnopqrstuvwxyz"),"ad-slot")]';
+        $adQuery = '//*[contains(concat(" ", normalize-space(@class), " "), " adsbygoogle ") or @data-ad-client or @data-ad-slot or contains(translate(@id,"ABCDEFGHIJKLMNOPQRSTUVWXYZ","abcdefghijklmnopqrstuvwxyz"),"ad-slot") or contains(translate(@src,"ABCDEFGHIJKLMNOPQRSTUVWXYZ","abcdefghijklmnopqrstuvwxyz"),"pagead2.googlesyndication.com") or contains(translate(@src,"ABCDEFGHIJKLMNOPQRSTUVWXYZ","abcdefghijklmnopqrstuvwxyz"),"googleads.g.doubleclick.net") or (self::meta and translate(@name,"ABCDEFGHIJKLMNOPQRSTUVWXYZ","abcdefghijklmnopqrstuvwxyz")="google-adsense-account") or (self::script and (contains(text(),"ca-pub-") or contains(text(),"adsbygoogle")))]';
         $adCount = $xpath->query($adQuery)->length;
 
         $consentQuery = '//*[contains(translate(@id,"ABCDEFGHIJKLMNOPQRSTUVWXYZ","abcdefghijklmnopqrstuvwxyz"),"cookie") or contains(translate(@class,"ABCDEFGHIJKLMNOPQRSTUVWXYZ","abcdefghijklmnopqrstuvwxyz"),"consent") or @data-cmp]';
@@ -57,12 +57,14 @@ final class PageInspector
 
         $lowerLinks = mb_strtolower(implode(' ', $links));
         $externalImages = 0;
+        $externalImageUrls = [];
         $missingAlt = 0;
         $host = strtolower((string) parse_url($response->url, PHP_URL_HOST));
         foreach ($images as $image) {
             $imageHost = strtolower((string) parse_url($image['src'], PHP_URL_HOST));
             if ($imageHost !== '' && $imageHost !== $host) {
                 $externalImages++;
+                $externalImageUrls[] = $image['src'];
             }
             if ($image['alt'] === '') {
                 $missingAlt++;
@@ -89,6 +91,7 @@ final class PageInspector
                 'has_contact_link' => str_contains($lowerLinks, 'contact'),
                 'has_consent_signal' => $hasConsentSignal,
                 'external_images' => $externalImages,
+                'external_image_urls' => array_values(array_unique($externalImageUrls)),
                 'images_missing_alt' => $missingAlt,
             ],
         );

@@ -15,7 +15,7 @@ final class Ga4Controller extends Controller
     public function connect(Website $site): RedirectResponse
     {
         $this->authorizeSite($site);
-        abort_unless(filled(config('maxguard.ga4.client_id')) && filled(config('maxguard.ga4.client_secret')), 422, 'Google OAuth is not configured.');
+        abort_unless(filled(config('maxguard.ga4.client_id')) && filled(config('maxguard.ga4.client_secret')), 422, 'Google OAuth chưa được cấu hình.');
         $state = Str::random(40);
         session(['ga4_oauth_state' => $state, 'ga4_website_id' => $site->id]);
         $query = http_build_query([
@@ -34,7 +34,7 @@ final class Ga4Controller extends Controller
     /** Validate OAuth state, exchange the code and persist encrypted tokens. */
     public function callback(Request $request): RedirectResponse
     {
-        abort_unless(hash_equals((string) session('ga4_oauth_state'), (string) $request->query('state')), 403, 'Invalid OAuth state.');
+        abort_unless(hash_equals((string) session('ga4_oauth_state'), (string) $request->query('state')), 403, 'Trạng thái OAuth không hợp lệ.');
         $site = Website::query()->findOrFail((int) session('ga4_website_id'));
         $this->authorizeSite($site);
         $response = Http::asForm()->post('https://oauth2.googleapis.com/token', [
@@ -44,7 +44,7 @@ final class Ga4Controller extends Controller
             'redirect_uri' => config('maxguard.ga4.redirect_uri') ?: route('ga4.callback'),
             'grant_type' => 'authorization_code',
         ]);
-        abort_unless($response->successful(), 422, 'Google rejected the OAuth token exchange.');
+        abort_unless($response->successful(), 422, 'Google đã từ chối yêu cầu trao đổi mã OAuth.');
         $site->ga4Connection()->updateOrCreate([], [
             'access_token' => $response->json('access_token'),
             'refresh_token' => $response->json('refresh_token'),
@@ -52,7 +52,7 @@ final class Ga4Controller extends Controller
         ]);
         session()->forget(['ga4_oauth_state', 'ga4_website_id']);
 
-        return redirect()->route('sites.show', $site)->with('status', 'GA4 connected. Enter the numeric property ID to sync traffic.');
+        return redirect()->route('sites.show', $site)->with('status', 'Đã kết nối GA4. Hãy nhập mã thuộc tính dạng số để đồng bộ lưu lượng.');
     }
 
     /** Save the numeric GA4 property selected by the site owner. */
@@ -62,7 +62,7 @@ final class Ga4Controller extends Controller
         $data = $request->validate(['property_id' => ['required', 'digits_between:1,20']]);
         $site->ga4Connection()->updateOrCreate([], ['property_id' => $data['property_id']]);
 
-        return back()->with('status', 'GA4 property saved.');
+        return back()->with('status', 'Đã lưu thuộc tính GA4.');
     }
 
     /** Pull and persist the latest seven-day URL traffic report on demand. */
@@ -71,7 +71,7 @@ final class Ga4Controller extends Controller
         $this->authorizeSite($site);
         $rows = $traffic->sync($site);
 
-        return back()->with('status', count($rows).' GA4 URL rows synced for the last 7 days.');
+        return back()->with('status', 'Đã đồng bộ '.count($rows).' dòng URL GA4 trong 7 ngày gần nhất.');
     }
 
     /** Enforce website ownership for every OAuth and GA4 mutation. */

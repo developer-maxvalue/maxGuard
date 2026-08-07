@@ -25,7 +25,6 @@ final class Page extends Model
         'ad_count',
         'ga4_views_7d',
         'ga4_synced_at',
-        'snapshot_path',
         'last_scanned_at',
         'meta',
     ];

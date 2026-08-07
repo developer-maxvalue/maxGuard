@@ -18,7 +18,6 @@ final class StoreWebsiteRequest extends FormRequest
         return [
             'name' => ['required', 'string', 'max:120'],
             'start_url' => ['required', 'url', 'max:2048', 'starts_with:http://,https://'],
-            'expected_monthly_revenue' => ['nullable', 'numeric', 'min:0', 'max:9999999999'],
         ];
     }
 
@@ -33,7 +32,7 @@ final class StoreWebsiteRequest extends FormRequest
                 app(SafeUrlValidator::class)->publicIps((string) $this->input('start_url'));
                 $domain = strtolower((string) parse_url((string) $this->input('start_url'), PHP_URL_HOST));
                 if ($domain !== '' && Website::query()->where('domain', $domain)->exists()) {
-                    $validator->errors()->add('start_url', 'This domain is already registered.');
+                    $validator->errors()->add('start_url', 'Tên miền này đã được đăng ký.');
                 }
             } catch (\Throwable $exception) {
                 $validator->errors()->add('start_url', $exception->getMessage());

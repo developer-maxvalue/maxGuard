@@ -1,12 +1,12 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="vi">
 
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>@yield('title', 'Dashboard') · MaxGuard</title>
-    <meta name="description" content="Publisher compliance and AdSense risk monitoring">
+    <title>@yield('title', 'Tổng quan') · MaxGuard</title>
+    <meta name="description" content="Giám sát tuân thủ nhà xuất bản và rủi ro AdSense">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

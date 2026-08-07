@@ -34,6 +34,8 @@ final class Scan extends Model
         'ai_findings_count',
         'findings_count',
         'score',
+        'ai_assessment',
+        'ai_assessed_at',
         'ruleset_version',
         'started_at',
         'finished_at',
@@ -44,6 +46,8 @@ final class Scan extends Model
 
     protected $casts = [
         'meta' => 'array',
+        'ai_assessment' => 'array',
+        'ai_assessed_at' => 'datetime',
         'use_ai' => 'boolean',
         'force_rescan' => 'boolean',
         'started_at' => 'datetime',
@@ -68,11 +72,6 @@ final class Scan extends Model
     public function findings(): HasMany
     {
         return $this->hasMany(Finding::class);
-    }
-
-    public function evidenceItems(): HasMany
-    {
-        return $this->hasMany(EvidenceItem::class);
     }
 
     public function targets(): HasMany

@@ -41,7 +41,7 @@ return [
         // Terra balances policy-review quality, latency and cost. Use gpt-5.6-sol for highest-quality review.
         'model' => env('MAXGUARD_AI_MODEL', 'gemini-2.5-flash'),
         'reasoning_effort' => env('MAXGUARD_AI_REASONING_EFFORT', 'low'),
-        'output_language' => env('MAXGUARD_AI_OUTPUT_LANGUAGE', 'English'),
+        'output_language' => env('MAXGUARD_AI_OUTPUT_LANGUAGE', 'Vietnamese'),
         'max_input_chars' => (int) env('MAXGUARD_AI_MAX_INPUT_CHARS', 12_000),
         'max_output_tokens' => (int) env('MAXGUARD_AI_MAX_OUTPUT_TOKENS', 1800),
         // 0 analyzes every crawled page. Keep a cap in production to control cost and scan duration.
@@ -105,5 +105,7 @@ return [
         'duplicate_bucket_limit' => (int) env('MAXGUARD_DUPLICATE_BUCKET_LIMIT', 200),
         'max_ads_per_page' => (int) env('MAXGUARD_MAX_ADS_PER_PAGE', 6),
         'min_words_per_ad' => (int) env('MAXGUARD_MIN_WORDS_PER_AD', 220),
+        'ad_page_empty_content_words' => (int) env('MAXGUARD_AD_PAGE_EMPTY_CONTENT_WORDS', 80),
+        'ad_page_thin_content_words' => (int) env('MAXGUARD_AD_PAGE_THIN_CONTENT_WORDS', 300),
     ],
 ];

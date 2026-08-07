@@ -5,9 +5,10 @@ namespace App\Http\Controllers;
 use App\Http\Requests\UpdateFindingRequest;
 use App\Models\Finding;
 use App\Models\Scan;
+use App\Support\UiText;
+use App\Services\CopyrightEvidenceExtractor;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Support\Str;
 use Illuminate\View\View;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
@@ -46,16 +47,16 @@ final class FindingController extends Controller
         return response()->streamDownload(function () use ($query): void {
             $spreadsheet = new Spreadsheet;
             $sheet = $spreadsheet->getActiveSheet();
-            $sheet->setTitle('Findings');
+            $sheet->setTitle('Phát hiện');
             $headers = [
-                'Finding ID', 'Scan ID', 'Website', 'URL', 'Source', 'Rule key', 'Category', 'Severity',
-                'Confidence', 'Status', 'Title', 'Summary', 'Policy reference', 'Revenue impact',
-                'First seen', 'Last seen', 'Remediation',
+                'Mã phát hiện', 'Mã lượt quét', 'Website', 'URL', 'Nguồn', 'Mã quy tắc', 'Danh mục', 'Mức độ',
+                'Độ tin cậy', 'Trạng thái', 'Tiêu đề', 'Tóm tắt', 'Tham chiếu chính sách',
+                'Phát hiện lần đầu', 'Phát hiện gần nhất', 'Khắc phục',
             ];
             $sheet->fromArray($headers, null, 'A1');
             $sheet->freezePane('A2');
-            $sheet->setAutoFilter('A1:Q1');
-            $sheet->getStyle('A1:Q1')->applyFromArray([
+            $sheet->setAutoFilter('A1:P1');
+            $sheet->getStyle('A1:P1')->applyFromArray([
                 'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
                 'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '2563EB']],
             ]);
@@ -68,19 +69,18 @@ final class FindingController extends Controller
                         (string) $finding->scan_id,
                         $finding->website->domain,
                         $finding->page?->url ?? $finding->website->start_url,
-                        str_starts_with($finding->rule_key, 'ai.') ? 'AI' : 'Rules',
+                        str_starts_with($finding->rule_key, 'ai.') ? 'AI' : 'Quy tắc',
                         $finding->rule_key,
-                        $finding->category,
-                        $finding->severity,
+                        UiText::label($finding->category),
+                        UiText::label($finding->severity),
                         (string) $finding->confidence,
-                        $finding->status,
-                        $finding->title,
-                        $finding->summary,
-                        $finding->policy_reference ?? '',
-                        (string) $finding->revenue_impact,
+                        UiText::label($finding->status),
+                        UiText::text($finding->title),
+                        UiText::text($finding->summary),
+                        UiText::text($finding->policy_reference),
                         $finding->first_seen_at->toIso8601String(),
                         $finding->last_seen_at->toIso8601String(),
-                        implode("\n", (array) $finding->remediation),
+                        implode("\n", UiText::texts((array) $finding->remediation)),
                     ];
                     foreach ($values as $column => $value) {
                         $coordinate = Coordinate::stringFromColumnIndex($column + 1).$row;
@@ -90,12 +90,12 @@ final class FindingController extends Controller
                 }
             });
 
-            foreach (range('A', 'Q') as $column) {
-                $sheet->getColumnDimension($column)->setAutoSize($column !== 'L' && $column !== 'Q');
+            foreach (range('A', 'P') as $column) {
+                $sheet->getColumnDimension($column)->setAutoSize($column !== 'L' && $column !== 'P');
             }
             $sheet->getColumnDimension('L')->setWidth(60);
-            $sheet->getColumnDimension('Q')->setWidth(55);
-            $sheet->getStyle('A1:Q'.max(1, $row - 1))->getAlignment()->setVertical('top')->setWrapText(true);
+            $sheet->getColumnDimension('P')->setWidth(55);
+            $sheet->getStyle('A1:P'.max(1, $row - 1))->getAlignment()->setVertical('top')->setWrapText(true);
 
             (new Xlsx($spreadsheet))->save('php://output');
             $spreadsheet->disconnectWorksheets();
@@ -105,34 +105,40 @@ final class FindingController extends Controller
         ]);
     }
 
-    public function show(Finding $finding): View
+    public function show(Finding $finding, CopyrightEvidenceExtractor $copyrightEvidence): View
     {
         $this->authorizeOwner($finding);
-        $finding->load(['website', 'page.copyrightReviews', 'evidenceItems' => fn ($query) => $query->latest('captured_at')]);
-        $signals = collect($finding->signals ?? [])->map(function ($value, string $key): array {
-            return [
-                'label' => Str::headline($key),
-                'value' => is_bool($value) ? ($value ? 'Yes' : 'No') : (is_scalar($value) ? (string) $value : 'Recorded'),
-                'detail' => 'Captured by the automated detector for this finding.',
-            ];
-        })->values()->all();
+        $finding->load(['website', 'page.copyrightReviews']);
+        $rawSignals = (array) ($finding->signals ?? []);
 
-        $timeline = [
-            ['time' => $finding->first_seen_at->format('H:i'), 'title' => 'Finding created', 'detail' => 'Automated detector created this case.'],
-        ];
-        foreach ($finding->evidenceItems->take(3) as $evidence) {
-            $timeline[] = ['time' => $evidence->captured_at->format('H:i'), 'title' => Str::headline($evidence->type), 'detail' => 'Immutable evidence stored with SHA-256 integrity hash.'];
+        $evidenceQuotes = collect((array) ($rawSignals['evidence'] ?? []))
+            ->merge((array) ($rawSignals['matching_phrases'] ?? []))
+            ->filter(fn ($quote): bool => is_scalar($quote) && trim((string) $quote) !== '')
+            ->map(fn ($quote): string => trim((string) $quote))
+            ->unique()
+            ->take(12)
+            ->values()
+            ->all();
+        $duplicateMatches = [];
+        if (is_string($rawSignals['matched_url'] ?? null) && $rawSignals['matched_url'] !== '') {
+            $duplicateMatches[] = [
+                'source_url' => $finding->page?->url ?? $finding->website->start_url,
+                'matched_url' => $rawSignals['matched_url'],
+                'similarity' => isset($rawSignals['similarity']) ? (int) $rawSignals['similarity'] : null,
+                'method' => (string) ($rawSignals['method'] ?? ''),
+            ];
         }
+        $copyrightSourceUrls = $copyrightEvidence->sourceUrls($finding);
 
         return view('findings.show', ['finding' => [
             ...$this->row($finding),
             'url' => $finding->page?->url ?? $finding->website->start_url,
-            'policy' => $finding->policy_reference ?? 'Manual policy mapping required',
-            'summary' => $finding->summary,
-            'signals' => $signals,
-            'actions' => $finding->remediation ?? ['Review the evidence and document the remediation decision.'],
-            'timeline' => $timeline,
-            'evidence' => $finding->evidenceItems,
+            'policy' => $finding->policy_reference ? UiText::text($finding->policy_reference) : 'Cần đối chiếu chính sách thủ công',
+            'summary' => UiText::text($finding->summary),
+            'evidence_quotes' => $evidenceQuotes,
+            'duplicate_matches' => $duplicateMatches,
+            'copyright_source_urls' => $copyrightSourceUrls,
+            'is_copyright' => $finding->category === 'Copyright',
             'page_id' => $finding->page?->id,
             'page_title' => $finding->page?->title,
             'copyright_review' => $finding->page?->copyrightReviews->first(),
@@ -149,7 +155,7 @@ final class FindingController extends Controller
             'resolved_at' => $data['status'] === 'resolved' ? now() : null,
         ]);
 
-        return back()->with('status', 'Finding workflow status updated.');
+        return back()->with('status', 'Đã cập nhật trạng thái xử lý phát hiện.');
     }
 
     private function row(Finding $finding): array
@@ -157,12 +163,13 @@ final class FindingController extends Controller
         return [
             'id' => $finding->public_id,
             'site' => $finding->website->domain,
-            'title' => $finding->title,
-            'category' => $finding->category,
-            'source' => str_starts_with($finding->rule_key, 'ai.') ? 'AI' : 'Rules',
+            'title' => UiText::text($finding->title),
+            'category' => UiText::label($finding->category),
+            'source' => str_starts_with($finding->rule_key, 'ai.') ? 'AI' : 'Quy tắc',
             'severity' => $finding->severity,
             'confidence' => $finding->confidence,
-            'affected' => $finding->page_id ? '1 URL' : 'Site-wide',
+            'affected' => $finding->page_id ? '1 URL' : 'Toàn website',
+            'url' => $finding->page?->url ?? $finding->website->start_url,
             'detected' => $finding->last_seen_at->diffForHumans(),
             'status' => $finding->status,
         ];
@@ -222,18 +229,18 @@ final class FindingController extends Controller
     {
         return response()->streamDownload(function () use ($query): void {
             $output = fopen('php://output', 'wb');
-            fputcsv($output, ['ID', 'Website', 'URL', 'Category', 'Severity', 'Confidence', 'Status', 'Title', 'Last seen']);
+            fputcsv($output, ['Mã', 'Website', 'URL', 'Danh mục', 'Mức độ', 'Độ tin cậy', 'Trạng thái', 'Tiêu đề', 'Phát hiện gần nhất']);
             $query->reorder('id')->chunkById(500, function ($findings) use ($output): void {
                 foreach ($findings as $finding) {
                     fputcsv($output, [
                         $finding->public_id,
                         $finding->website->domain,
                         $finding->page?->url,
-                        $finding->category,
-                        $finding->severity,
+                        UiText::label($finding->category),
+                        UiText::label($finding->severity),
                         $finding->confidence,
-                        $finding->status,
-                        $finding->title,
+                        UiText::label($finding->status),
+                        UiText::text($finding->title),
                         $finding->last_seen_at->toIso8601String(),
                     ]);
                 }

@@ -1,12 +1,12 @@
 @extends('layouts.app')
 
-@section('title', 'Portfolio overview')
+@section('title', 'Tổng quan hệ thống')
 
 @section('content')
     <div class="mg-page-heading">
         <div>
-            <h1>Portfolio overview</h1>
-            <p>See risk, revenue exposure and remediation priorities across every site.</p>
+            <h1>Tổng quan hệ thống</h1>
+            <p>Quét, phát hiện và ưu tiên các vấn đề có thể ảnh hưởng đến việc tuân thủ AdSense trên mọi website.</p>
         </div>
         <form method="POST" action="{{ route('scans.store') }}" class="d-flex align-items-center gap-2 flex-wrap">
             @csrf
@@ -15,11 +15,11 @@
             @if ($aiReady)
                 <input type="hidden" name="use_ai" value="1">
             @endif
-            <label class="visually-hidden" for="dashboard-max-urls">Maximum newest posts per site</label>
+            <label class="visually-hidden" for="dashboard-max-urls">Số bài viết mới tối đa mỗi website</label>
             <input id="dashboard-max-urls" class="form-control form-control-solid" style="width: 170px" type="number"
-                name="max_urls" min="1" max="{{ $maxUrlSafetyLimit }}" placeholder="Latest posts / site">
+                name="max_urls" min="1" max="{{ $maxUrlSafetyLimit }}" placeholder="Bài mới / website">
             <button class="btn btn-primary px-5" type="submit">
-                <i class="bi bi-upc-scan me-2"></i>Run full scan{{ $aiReady ? ' + AI' : '' }}
+                <i class="bi bi-upc-scan me-2"></i>Quét toàn bộ{{ $aiReady ? ' + AI' : '' }}
             </button>
         </form>
     </div>
@@ -37,15 +37,15 @@
             <div class="card mg-card h-100">
                 <div class="card-header border-0 pt-2">
                     <div class="card-title d-block">
-                        <h2 class="mg-card-title">Compliance trend</h2>
-                        <p class="mg-card-subtitle">Portfolio score over the last 12 weeks</p>
+                        <h2 class="mg-card-title">Xu hướng tuân thủ</h2>
+                        <p class="mg-card-subtitle">Điểm toàn hệ thống trong 12 tuần gần nhất</p>
                     </div>
                     <div class="card-toolbar">
-                        <span class="badge badge-light">Last 12 weeks</span>
+                        <span class="badge badge-light">12 tuần gần nhất</span>
                     </div>
                 </div>
                 <div class="card-body pt-0">
-                    <div id="compliance-trend-chart" class="mg-chart" aria-label="Compliance score trend chart"></div>
+                    <div id="compliance-trend-chart" class="mg-chart" aria-label="Biểu đồ xu hướng điểm tuân thủ"></div>
                 </div>
             </div>
         </div>
@@ -54,8 +54,8 @@
             <div class="card mg-card h-100">
                 <div class="card-header border-0 pt-2">
                     <div class="card-title d-block">
-                        <h2 class="mg-card-title">Portfolio health</h2>
-                        <p class="mg-card-subtitle">{{ $health['total'] }} sites ranked by current risk</p>
+                        <h2 class="mg-card-title">Tình trạng hệ thống</h2>
+                        <p class="mg-card-subtitle">{{ $health['total'] }} website được xếp theo rủi ro hiện tại</p>
                     </div>
                 </div>
                 <div class="card-body pt-2">
@@ -63,19 +63,18 @@
                         <div class="mg-health-donut"
                             style="--healthy: {{ $health['healthy_percent'] }}; --review: {{ $health['review_percent'] }}"
                             role="img"
-                            aria-label="{{ $health['healthy'] }} healthy, {{ $health['review'] }} need review, {{ $health['critical'] }} critical">
-                            <div><strong>{{ $health['total'] }}</strong><small>sites</small></div>
+                            aria-label="{{ $health['healthy'] }} tốt, {{ $health['review'] }} cần xem xét, {{ $health['critical'] }} nghiêm trọng">
+                            <div><strong>{{ $health['total'] }}</strong><small>website</small></div>
                         </div>
                         <div class="mg-health-legend">
-                            <div><span class="bg-success"></span><em>Healthy</em><strong>{{ $health['healthy'] }}</strong>
+                            <div><span class="bg-success"></span><em>Tốt</em><strong>{{ $health['healthy'] }}</strong>
                             </div>
-                            <div><span class="bg-warning"></span><em>Needs
-                                    review</em><strong>{{ $health['review'] }}</strong></div>
-                            <div><span class="bg-danger"></span><em>Critical</em><strong>{{ $health['critical'] }}</strong>
+                            <div><span class="bg-warning"></span><em>Cần xem xét</em><strong>{{ $health['review'] }}</strong></div>
+                            <div><span class="bg-danger"></span><em>Nghiêm trọng</em><strong>{{ $health['critical'] }}</strong>
                             </div>
                         </div>
                     </div>
-                    <a href="{{ route('sites.index') }}" class="btn btn-light-primary w-100 mt-5">View all sites</a>
+                    <a href="{{ route('sites.index') }}" class="btn btn-light-primary w-100 mt-5">Xem tất cả website</a>
                 </div>
             </div>
         </div>
@@ -84,11 +83,11 @@
     <div class="card mg-card">
         <div class="card-header border-0 pt-2">
             <div class="card-title d-block">
-                <h2 class="mg-card-title">Sites requiring attention</h2>
-                <p class="mg-card-subtitle">Sorted by potential AdSense impact</p>
+                <h2 class="mg-card-title">Website cần chú ý</h2>
+                <p class="mg-card-subtitle">Sắp xếp theo điểm tuân thủ và mức độ nghiêm trọng của các vấn đề đã phát hiện</p>
             </div>
             <div class="card-toolbar">
-                <a href="{{ route('sites.index') }}" class="btn btn-sm btn-light">Review portfolio</a>
+                <a href="{{ route('sites.index') }}" class="btn btn-sm btn-light">Xem toàn hệ thống</a>
             </div>
         </div>
         <div class="card-body pt-0">
@@ -96,12 +95,12 @@
                 <table class="table align-middle table-row-dashed gy-4 mg-table">
                     <thead>
                         <tr class="text-uppercase text-muted fs-8">
-                            <th>Site</th>
-                            <th>Score</th>
-                            <th>Top risk</th>
-                            <th>Findings</th>
-                            <th>Last scan</th>
-                            <th class="text-end">Status</th>
+                            <th>Website</th>
+                            <th>Điểm</th>
+                            <th>Rủi ro lớn nhất</th>
+                            <th>Phát hiện</th>
+                            <th>Lần quét cuối</th>
+                            <th class="text-end">Trạng thái</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -133,8 +132,8 @@
     <script>
         window.MaxGuardPage = {
             trend: @json($trend),
-            trendLabels: ['May 6', '', 'May 20', '', 'Jun 3', '', 'Jun 17', '', 'Jul 1', '', 'Jul 15', '', 'Jul 29', '',
-                'Aug 12', 'Now'
+            trendLabels: ['6/5', '', '20/5', '', '3/6', '', '17/6', '', '1/7', '', '15/7', '', '29/7', '',
+                '12/8', 'Hiện tại'
             ]
         };
     </script>

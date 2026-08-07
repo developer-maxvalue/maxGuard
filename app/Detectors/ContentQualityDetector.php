@@ -25,14 +25,14 @@ final class ContentQualityDetector implements Detector
                 category: 'Content quality',
                 severity: $page->wordCount < 150 ? 'high' : 'review',
                 confidence: 92,
-                title: 'Thin or insufficient page content',
-                summary: "Only {$page->wordCount} readable words were found. Pages with little original editorial value may be unsuitable for monetization.",
-                policyReference: 'Google Publisher Policies — low-value or insufficient content review',
+                title: 'Nội dung trang mỏng hoặc không đầy đủ',
+                summary: "Chỉ tìm thấy {$page->wordCount} từ có thể đọc. Trang có ít giá trị biên tập nguyên bản có thể không phù hợp để kiếm tiền.",
+                policyReference: 'Chính sách dành cho nhà xuất bản của Google — xem xét nội dung giá trị thấp hoặc không đầy đủ',
                 signals: ['word_count' => $page->wordCount, 'paragraph_count' => $page->meta['paragraph_count'] ?? 0],
                 remediation: [
-                    'Add substantial original reporting, analysis or first-hand expertise.',
-                    'Remove the page from monetization if it exists only to host ads or embeds.',
-                    'Review navigation and ensure the page has a clear purpose for users.',
+                    'Bổ sung nội dung tường thuật, phân tích hoặc kiến thức chuyên môn trực tiếp có giá trị và nguyên bản.',
+                    'Loại trang khỏi chương trình kiếm tiền nếu trang chỉ tồn tại để chứa quảng cáo hoặc nội dung nhúng.',
+                    'Kiểm tra điều hướng và bảo đảm trang có mục đích rõ ràng cho người dùng.',
                 ],
             );
         } elseif ($page->wordCount < $lowValue && ($page->meta['paragraph_count'] ?? 0) < 3) {
@@ -41,11 +41,11 @@ final class ContentQualityDetector implements Detector
                 category: 'Content quality',
                 severity: 'review',
                 confidence: 76,
-                title: 'Limited editorial structure',
-                summary: 'The page has enough raw text but very little structured editorial content.',
-                policyReference: 'Google Publisher Policies — valuable inventory review',
+                title: 'Cấu trúc biên tập còn hạn chế',
+                summary: 'Trang có đủ văn bản thô nhưng rất ít nội dung biên tập có cấu trúc.',
+                policyReference: 'Chính sách dành cho nhà xuất bản của Google — xem xét khoảng không quảng cáo có giá trị',
                 signals: ['word_count' => $page->wordCount, 'paragraph_count' => $page->meta['paragraph_count'] ?? 0],
-                remediation: ['Improve article structure, sourcing, author context and user-focused explanation.'],
+                remediation: ['Cải thiện cấu trúc bài viết, nguồn tham khảo, thông tin tác giả và phần giải thích hướng đến người dùng.'],
             );
         }
 
@@ -55,14 +55,13 @@ final class ContentQualityDetector implements Detector
                 category: 'Content quality',
                 severity: 'info',
                 confidence: 98,
-                title: 'Page title or heading structure needs review',
-                summary: 'A clear title and one primary heading help users and reviewers understand the page purpose.',
+                title: 'Tiêu đề trang hoặc cấu trúc đề mục cần được xem xét',
+                summary: 'Tiêu đề rõ ràng và một đề mục chính giúp người dùng cùng người kiểm duyệt hiểu mục đích của trang.',
                 signals: ['title_present' => $page->title !== '', 'h1_count' => $page->h1Count],
-                remediation: ['Add a descriptive document title and one primary H1 heading.'],
+                remediation: ['Thêm tiêu đề mô tả cho tài liệu và một đề mục H1 chính.'],
             );
         }
 
         return $results;
     }
 }
-

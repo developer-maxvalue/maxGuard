@@ -6,7 +6,6 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
 
 final class Finding extends Model
@@ -28,7 +27,6 @@ final class Finding extends Model
         'title',
         'summary',
         'policy_reference',
-        'revenue_impact',
         'signals',
         'remediation',
         'first_seen_at',
@@ -39,7 +37,6 @@ final class Finding extends Model
     protected $casts = [
         'signals' => 'array',
         'remediation' => 'array',
-        'revenue_impact' => 'decimal:2',
         'first_seen_at' => 'datetime',
         'last_seen_at' => 'datetime',
         'resolved_at' => 'datetime',
@@ -77,14 +74,8 @@ final class Finding extends Model
         return $this->belongsTo(User::class, 'assigned_to');
     }
 
-    public function evidenceItems(): HasMany
-    {
-        return $this->hasMany(EvidenceItem::class);
-    }
-
     public function scopeOpen(Builder $query): Builder
     {
         return $query->whereIn('status', ['open', 'investigating', 'remediating']);
     }
 }
-

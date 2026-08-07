@@ -30,16 +30,20 @@ final class CopyrightSignalsDetector implements Detector
             category: 'Copyright',
             severity: $external >= 3 ? 'high' : 'review',
             confidence: $external >= 3 ? 82 : 68,
-            title: 'External media provenance is unverified',
-            summary: "{$external} externally hosted image(s) were found without visible licensing or attribution signals. This is a review signal, not a legal conclusion.",
-            policyReference: 'Google Publisher Policies — intellectual property abuse',
-            signals: ['external_images' => $external, 'visible_attribution' => false],
+            title: 'Nguồn gốc nội dung đa phương tiện bên ngoài chưa được xác minh',
+            summary: "Tìm thấy {$external} hình ảnh lưu trữ bên ngoài nhưng không có dấu hiệu cấp phép hoặc ghi nguồn rõ ràng. Đây là tín hiệu cần xem xét, không phải kết luận pháp lý.",
+            policyReference: 'Chính sách dành cho nhà xuất bản của Google — lạm dụng quyền sở hữu trí tuệ',
+            signals: [
+                'external_images' => $external,
+                'external_image_urls' => array_slice((array) ($page->meta['external_image_urls'] ?? []), 0, 20),
+                'visible_attribution' => false,
+                'source_status' => 'unverified_external_media',
+            ],
             remediation: [
-                'Verify ownership, license or written permission for every media asset.',
-                'Store contracts, invoices or permission evidence with the remediation case.',
-                'Replace unverified media with owned or properly licensed alternatives.',
+                'Xác minh quyền sở hữu, giấy phép hoặc văn bản cho phép đối với mọi nội dung đa phương tiện.',
+                'Lưu hợp đồng, hóa đơn hoặc bằng chứng cho phép trong hồ sơ khắc phục.',
+                'Thay nội dung chưa xác minh bằng nội dung thuộc sở hữu hoặc được cấp phép hợp lệ.',
             ],
         )];
     }
 }
-

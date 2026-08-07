@@ -65,7 +65,7 @@ Màn hình: `/dashboard`
 | **Monitored** | Số website đã có `last_scanned_at`; website chưa từng scan không được tính. |
 | **Compliance score** | Trung bình cộng `overall_score` của toàn bộ website, làm tròn thành số nguyên. Nếu chưa có website thì mặc định 100. Dòng “weighted health” trên giao diện hiện chỉ là mô tả; code thực tế chưa áp dụng trọng số. |
 | **Critical issues** | Tổng finding có severity `critical` và trạng thái `open`, `investigating` hoặc `remediating`. |
-| **Protected revenue** | Tổng `expected_monthly_revenue` của các website có `overall_score >= 80`, hiển thị theo nghìn USD (`$x.xK`). Đây là doanh thu tháng ước tính, không phải doanh thu GA4 thực tế. |
+| **High issues** | Tổng finding mức `high` đang ở trạng thái mở, điều tra hoặc khắc phục. |
 
 ### Compliance trend
 
@@ -122,7 +122,7 @@ Danh sách được sắp theo `overall_score` tăng dần, tức website rủi 
 | **Pages** | Số URL đã scan trong lần scan gần nhất. Với dữ liệu cũ chưa có thống kê discovery, hệ thống dùng `pages_count`. |
 | **Coverage** | `round(scanned / discovered × 100)`, tối đa 100%. Nếu chưa discover URL nào thì bằng 0%. |
 | **Partial** | Xuất hiện khi `last_scan_partial = true` hoặc số URL scan nhỏ hơn số URL discover. |
-| **Revenue risk** | Tổng `revenue_impact` của tất cả finding đang mở trên website, hiển thị USD và làm tròn không có phần thập phân. |
+| **Top issue** | Finding đang mở có mức nghiêm trọng và độ tin cậy cao nhất cần ưu tiên xử lý. |
 | **Last scan** | Thời gian tương đối từ lần scan gần nhất hoặc `Never`. |
 
 #### Bộ lọc
@@ -138,7 +138,6 @@ Danh sách được sắp theo `overall_score` tăng dần, tức website rủi 
 |---|---|
 | **Display name** | Tên thân thiện để nhận diện website. |
 | **Start URL** | URL gốc dùng để bắt đầu discovery/crawl; hệ thống chuẩn hóa URL và trích domain. |
-| **Estimated monthly AdSense revenue** | Doanh thu AdSense tháng do người dùng ước tính. Dữ liệu này phục vụ chỉ số protected revenue; không được tự động lấy từ GA4. |
 
 Website mới có trạng thái ban đầu là `pending`.
 
@@ -151,7 +150,7 @@ Màn hình: `/sites/{site}`
 | Chỉ số | Ý nghĩa |
 |---|---|
 | **Overall score** | Điểm sức khỏe website từ 0–100, được tính từ các finding đang mở. Điểm cao là tốt. |
-| **Revenue at risk** | Tổng `revenue_impact` của finding đang mở. Đây là ước tính tác động, không phải doanh thu đã mất được GA4 xác nhận. |
+| **Scan coverage** | Tỷ lệ URL đã quét trên tổng URL phát hiện trong lượt quét gần nhất. |
 | **Pages analyzed** | Số URL đã scan ở lần gần nhất. Ghi chú hiển thị coverage và tổng URL đã discover. |
 | **Open findings** | Số finding đang ở open, investigating hoặc remediating. |
 
@@ -220,6 +219,14 @@ Hiển thị tối đa 10 finding đang mở, ưu tiên critical → high → re
 | **Primary issue** | Tiêu đề finding. |
 | **Severity** | Mức nghiêm trọng. |
 | **Evidence** | Số evidence item gắn với finding. |
+
+#### AI site assessment
+
+- Sau khi một lượt quét hoàn tất, hệ thống tự tổng hợp nhận định AI nếu AI đã được cấu hình.
+- AI chỉ nhận dữ liệu đã quét: điểm tổng thể, độ phủ, thống kê severity/category, finding, confidence, URL, detector signals, evidence và hướng khắc phục.
+- Kết quả gồm mức rủi ro, tóm tắt toàn site, vấn đề chi tiết, căn cứ, hành động ưu tiên và giới hạn của dữ liệu.
+- Bản đánh giá được lưu theo lượt quét. Nút **AI đánh giá lại** trên trang website sẽ đọc lại dữ liệu của lượt quét hoàn tất gần nhất và thay thế bản nhận định của lượt quét đó.
+- Đây là nhận định hỗ trợ rà soát, không phải kết luận chắc chắn về quyết định thực thi của Google.
 
 ---
 
@@ -296,12 +303,11 @@ Chỉ xuất hiện khi finding gắn với một page.
 | **Matching source URL** | URL nguồn/trang trùng khớp dùng làm căn cứ. |
 | **Review notes** | Ghi chú kết luận của người kiểm tra. |
 
-#### Captured page evidence
+#### Dữ liệu làm căn cứ
 
-- **HTML snapshot**: bản HTML được lưu tại lúc thu thập.
-- **Detector signals**: các tín hiệu máy phát hiện và lưu cùng finding.
-- **SHA-256 integrity**: hash dùng kiểm tra evidence không bị thay đổi.
-- **Immutable snapshot**: mô tả mục tiêu lưu evidence bất biến; cần dùng file tải xuống/hash làm căn cứ thay vì hình mô phỏng browser trên giao diện.
+- Hệ thống không lưu file HTML snapshot hoặc file signal JSON.
+- Các câu trích dẫn, URL nguồn/đối chiếu, URL duplicate và chỉ số detector được lưu trong record finding/scan của database.
+- Trang chi tiết chỉ hiển thị nội dung cần đối chiếu trực tiếp; không có khung browser mô phỏng, danh sách file evidence, kế hoạch khắc phục, bảng tín hiệu hoặc timeline evidence.
 
 #### Risk assessment
 
@@ -343,6 +349,13 @@ Các scan type:
 | `copyright` | Trùng nội dung, text similarity, hình ảnh và nguồn gốc media. |
 | `ads` | Mật độ, vị trí quảng cáo và nguy cơ click nhầm. |
 | `privacy` | CMP, consent mode và disclosure. |
+
+Với kiểm tra quảng cáo, hệ thống có hai finding kết hợp nội dung và quảng cáo:
+
+- `ads.on-page-without-content`: có tín hiệu/mã quảng cáo nhưng trang có dưới 80 từ có thể đọc;
+- `ads.on-thin-content-page`: có tín hiệu/mã quảng cáo nhưng trang có dưới 300 từ có thể đọc.
+
+Các ngưỡng này có thể cấu hình bằng `MAXGUARD_AD_PAGE_EMPTY_CONTENT_WORDS` và `MAXGUARD_AD_PAGE_THIN_CONTENT_WORDS`. Hệ thống nhận diện cả slot quảng cáo và mã Google Auto Ads có trong HTML nguồn.
 
 ### 5.2. Queue activity
 
@@ -518,7 +531,7 @@ Chỉ tài khoản có `is_admin = true` được truy cập. Admin nhìn thấy
 | **Active scans** | Tổng scan đang queued hoặc running. |
 | **Open findings** | Finding toàn hệ thống đang open, investigating hoặc remediating. |
 | **Critical** | Finding critical đang mở trên toàn hệ thống. |
-| **Est. revenue** | Tổng Estimated monthly AdSense revenue do các owner nhập; không phải dữ liệu AdSense/GA4 thực tế. |
+| **AI reviewed** | Số website đã có ít nhất một bản nhận định AI theo dữ liệu quét. |
 
 Các bảng quản trị hiển thị 20 user mới nhất, 20 website điểm thấp nhất, 15 scan mới nhất và 15 finding đang mở có mức ưu tiên cao nhất.
 

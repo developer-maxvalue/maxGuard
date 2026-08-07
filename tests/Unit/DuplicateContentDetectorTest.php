@@ -23,6 +23,7 @@ final class DuplicateContentDetectorTest extends TestCase
         $this->assertCount(1, $results);
         $this->assertSame('duplicate.internal-near-match', $results[0]->ruleKey);
         $this->assertSame('https://example.com/first', $results[0]->signals['matched_url']);
+        $this->assertNotEmpty($results[0]->signals['matching_phrases']);
     }
 
     private function page(string $url, string $text): PageDocument

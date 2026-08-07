@@ -8,7 +8,7 @@ use App\Data\PageDocument;
 
 final class DuplicateContentDetector implements Detector
 {
-    /** @var list<array{url: string, sketch: array<string, true>}> */
+    /** @var list<array{url: string, sketch: array<string, string|bool>}> */
     private array $seen = [];
 
     /** @var array<string, list<int>> */
@@ -34,7 +34,7 @@ final class DuplicateContentDetector implements Detector
         return $this->detectSketch($page->url, $this->sketchFor($page));
     }
 
-    /** @return array<string, true> */
+    /** @return array<string, string> */
     public function sketchFor(PageDocument $page): array
     {
         if ($page->wordCount < 150) {
@@ -44,7 +44,7 @@ final class DuplicateContentDetector implements Detector
         return $this->sketch($page->normalizedText());
     }
 
-    /** @param array<string, true> $sketch @return list<DetectorResult> */
+    /** @param array<string, string|bool> $sketch @return list<DetectorResult> */
     public function detectSketch(string $url, array $sketch): array
     {
         if ($sketch === []) {
@@ -54,6 +54,7 @@ final class DuplicateContentDetector implements Detector
         $candidates = $this->candidates($sketch);
         $best = 0.0;
         $matchedUrl = null;
+        $matchedSketch = [];
 
         foreach ($candidates as $index) {
             $candidate = $this->seen[$index];
@@ -61,6 +62,7 @@ final class DuplicateContentDetector implements Detector
             if ($score > $best) {
                 $best = $score;
                 $matchedUrl = $candidate['url'];
+                $matchedSketch = $candidate['sketch'];
             }
         }
 
@@ -71,26 +73,35 @@ final class DuplicateContentDetector implements Detector
         }
 
         $percent = (int) round($best * 100);
+        $matchingPhrases = array_values(array_filter(
+            array_values(array_intersect_key($sketch, $matchedSketch)),
+            fn ($phrase): bool => is_string($phrase) && $phrase !== ''
+        ));
 
         return [new DetectorResult(
             ruleKey: 'duplicate.internal-near-match',
             category: 'Duplicate content',
             severity: $best >= 0.95 ? 'high' : 'review',
             confidence: $percent,
-            title: 'Substantial internal content similarity',
-            summary: "This page has an estimated {$percent}% four-word shingle similarity with another page on the same site.",
-            policyReference: 'Google Publisher Policies — low-value/reused inventory review',
-            signals: ['similarity' => $percent, 'matched_url' => $matchedUrl, 'method' => 'bottom-k sketch of 4-word shingles'],
+            title: 'Nội dung nội bộ có độ tương đồng đáng kể',
+            summary: "Trang này có độ tương đồng ước tính {$percent}% theo cụm bốn từ với một trang khác trên cùng website.",
+            policyReference: 'Chính sách dành cho nhà xuất bản của Google — xem xét nội dung giá trị thấp hoặc tái sử dụng',
+            signals: [
+                'similarity' => $percent,
+                'matched_url' => $matchedUrl,
+                'matching_phrases' => array_slice($matchingPhrases, 0, 8),
+                'method' => 'bottom-k sketch of 4-word shingles',
+            ],
             remediation: [
-                'Consolidate equivalent pages and use a canonical URL where appropriate.',
-                'Add distinct original value rather than changing only the headline or introduction.',
-                'Do not treat this signal alone as proof of copyright infringement.',
+                'Hợp nhất các trang tương đương và dùng URL chuẩn khi phù hợp.',
+                'Bổ sung giá trị nguyên bản khác biệt thay vì chỉ đổi tiêu đề hoặc phần mở đầu.',
+                'Không xem riêng tín hiệu này là bằng chứng vi phạm bản quyền.',
             ],
             fingerprintSalt: hash('sha256', $matchedUrl),
         )];
     }
 
-    /** @return array<string, true> */
+    /** @return array<string, string> */
     private function sketch(string $text): array
     {
         $words = preg_split('/\s+/u', $text) ?: [];
@@ -98,7 +109,7 @@ final class DuplicateContentDetector implements Detector
         $limit = min(max(0, count($words) - 3), 3000);
         for ($index = 0; $index < $limit; $index++) {
             $shingle = implode(' ', array_slice($words, $index, 4));
-            $hashes[substr(hash('sha1', $shingle), 0, 16)] = true;
+            $hashes[substr(hash('sha1', $shingle), 0, 16)] = $shingle;
         }
 
         ksort($hashes, SORT_STRING);
@@ -123,7 +134,7 @@ final class DuplicateContentDetector implements Detector
         return array_map('intval', array_slice(array_keys($counts), 0, $limit));
     }
 
-    /** @param array<string, true> $sketch */
+    /** @param array<string, string|bool> $sketch */
     private function remember(string $url, array $sketch): void
     {
         $index = count($this->seen);
@@ -139,7 +150,7 @@ final class DuplicateContentDetector implements Detector
         }
     }
 
-    /** @param array<string, true> $first @param array<string, true> $second */
+    /** @param array<string, string|bool> $first @param array<string, string|bool> $second */
     private function jaccard(array $first, array $second): float
     {
         if ($first === [] || $second === []) {

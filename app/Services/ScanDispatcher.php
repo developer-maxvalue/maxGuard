@@ -26,6 +26,7 @@ final class ScanDispatcher
         bool $useAi = false,
         bool $forceRescan = false,
     ): Scan {
+        $aiConfiguration = app(AiConfiguration::class);
         if (! in_array($type, ['full', 'priority', 'copyright', 'ads', 'privacy'], true)) {
             throw ValidationException::withMessages(['scan_type' => 'Unsupported scan type.']);
         }
@@ -34,9 +35,9 @@ final class ScanDispatcher
         if ($maxUrls !== null && ($maxUrls < 1 || $maxUrls > $safetyLimit)) {
             throw ValidationException::withMessages(['max_urls' => "Maximum newest posts must be between 1 and {$safetyLimit}."]);
         }
-        if ($useAi && (! (bool) config('maxguard.ai.enabled') || blank(config('maxguard.ai.api_key')))) {
+        if ($useAi && ! $aiConfiguration->isReady()) {
             throw ValidationException::withMessages([
-                'use_ai' => 'AI analysis is not configured. Set GEMINI_API_KEY and MAXGUARD_AI_ENABLED=true.',
+                'use_ai' => 'AI chưa được cấu hình. Hãy mở Quản trị → Cài đặt AI để thiết lập kết nối.',
             ]);
         }
 

@@ -25,11 +25,11 @@ final class AdsTxtDetector implements Detector
                 category: 'Ad experience',
                 severity: 'high',
                 confidence: 98,
-                title: 'ads.txt is missing or empty',
-                summary: 'The crawler could not find a usable ads.txt file at the site root.',
-                policyReference: 'IAB ads.txt / Google AdSense inventory authorization review',
+                title: 'Thiếu tệp ads.txt hoặc tệp đang trống',
+                summary: 'Trình thu thập không tìm thấy tệp ads.txt hợp lệ tại thư mục gốc của website.',
+                policyReference: 'IAB ads.txt / xem xét ủy quyền khoảng không quảng cáo Google AdSense',
                 signals: ['http_status' => $page->meta['ads_txt_status'] ?? null, 'authorized_lines' => 0],
-                remediation: ['Publish a valid ads.txt at the root domain and verify the publisher ID values.'],
+                remediation: ['Đăng tệp ads.txt hợp lệ tại tên miền gốc và xác minh các giá trị mã nhà xuất bản.'],
             )];
         }
 
@@ -39,15 +39,14 @@ final class AdsTxtDetector implements Detector
                 category: 'Ad experience',
                 severity: 'review',
                 confidence: 86,
-                title: 'Google seller entry not detected in ads.txt',
-                summary: 'ads.txt exists, but no line beginning with google.com was found.',
-                policyReference: 'Google AdSense ads.txt authorization review',
+                title: 'Không phát hiện mục người bán Google trong ads.txt',
+                summary: 'Tệp ads.txt tồn tại nhưng không tìm thấy dòng nào bắt đầu bằng google.com.',
+                policyReference: 'Xem xét ủy quyền ads.txt của Google AdSense',
                 signals: ['authorized_lines' => $page->meta['ads_txt_lines'] ?? 0, 'google_entry' => false],
-                remediation: ['Compare ads.txt with the exact publisher declaration shown in the AdSense account.'],
+                remediation: ['Đối chiếu ads.txt với khai báo nhà xuất bản chính xác hiển thị trong tài khoản AdSense.'],
             )];
         }
 
         return [];
     }
 }
-

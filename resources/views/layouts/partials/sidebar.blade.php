@@ -17,65 +17,68 @@
                 : 0);
 @endphp
 
-<aside class="mg-sidebar" id="mg-sidebar" aria-label="Primary navigation">
+<aside class="mg-sidebar" id="mg-sidebar" aria-label="Điều hướng chính">
     <div class="mg-brand">
-        <a href="{{ route('dashboard') }}" class="mg-brand-link" aria-label="MaxGuard dashboard">
+        <a href="{{ route('dashboard') }}" class="mg-brand-link" aria-label="Bảng điều khiển MaxGuard">
             <span class="mg-brand-mark">M</span>
             <span>
                 <strong>MaxGuard</strong>
-                <small>Publisher compliance</small>
+                <small>Tuân thủ nhà xuất bản</small>
             </span>
         </a>
         <button class="btn btn-sm btn-icon btn-active-color-primary d-lg-none" data-mg-sidebar-close
-            aria-label="Close menu">
+            aria-label="Đóng trình đơn">
             <i class="bi bi-x-lg"></i>
         </button>
     </div>
 
     <nav class="mg-nav">
-        <span class="mg-nav-label">Workspace</span>
+        <span class="mg-nav-label">Không gian làm việc</span>
 
         <a class="mg-nav-link {{ request()->routeIs('dashboard') ? 'active' : '' }}" href="{{ route('dashboard') }}">
-            <i class="bi bi-grid"></i><span>Overview</span>
+            <i class="bi bi-grid"></i><span>Tổng quan</span>
         </a>
         <a class="mg-nav-link {{ request()->routeIs('sites.*') ? 'active' : '' }}" href="{{ route('sites.index') }}">
-            <i class="bi bi-globe2"></i><span>Sites</span>
+            <i class="bi bi-globe2"></i><span>Website</span>
         </a>
         <a class="mg-nav-link {{ request()->routeIs('findings.*') ? 'active' : '' }}"
             href="{{ route('findings.index') }}">
-            <i class="bi bi-exclamation-triangle"></i><span>Findings</span>
+            <i class="bi bi-exclamation-triangle"></i><span>Phát hiện</span>
             @if ($sidebarCritical > 0)
                 <span class="mg-nav-count">{{ $sidebarCritical }}</span>
             @endif
         </a>
         <a class="mg-nav-link {{ request()->routeIs('scans.*') ? 'active' : '' }}" href="{{ route('scans.index') }}">
-            <i class="bi bi-upc-scan"></i><span>Scan center</span>
+            <i class="bi bi-upc-scan"></i><span>Trung tâm quét</span>
         </a>
         @if (auth()->user()?->is_admin)
-            <span class="mg-nav-label mt-5">Administration</span>
-            <a class="mg-nav-link {{ request()->routeIs('admin.*') ? 'active' : '' }}" href="{{ route('admin.index') }}">
-                <i class="bi bi-sliders"></i><span>System admin</span>
+            <span class="mg-nav-label mt-5">Quản trị</span>
+            <a class="mg-nav-link {{ request()->routeIs('admin.index') ? 'active' : '' }}" href="{{ route('admin.index') }}">
+                <i class="bi bi-sliders"></i><span>Quản trị hệ thống</span>
+            </a>
+            <a class="mg-nav-link {{ request()->routeIs('admin.ai-settings.*') ? 'active' : '' }}" href="{{ route('admin.ai-settings.index') }}">
+                <i class="bi bi-stars"></i><span>Cài đặt AI</span>
             </a>
         @endif
         <a class="mg-nav-link" href="{{ route('findings.index') }}">
-            <i class="bi bi-file-earmark-check"></i><span>Evidence</span>
+            <i class="bi bi-file-earmark-check"></i><span>Bằng chứng</span>
         </a>
         <a class="mg-nav-link" href="{{ route('findings.export.xlsx') }}">
-            <i class="bi bi-file-earmark-excel"></i><span>Excel report</span>
+            <i class="bi bi-file-earmark-excel"></i><span>Báo cáo Excel</span>
         </a>
     </nav>
 
     <div class="mg-coverage-card">
         <div class="d-flex align-items-center justify-content-between mb-2">
-            <span class="fw-semibold text-white">Coverage</span>
-            <span class="mg-live-dot">Live</span>
+            <span class="fw-semibold text-white">Phạm vi</span>
+            <span class="mg-live-dot">Trực tiếp</span>
         </div>
-        <div class="fs-7 text-white-50 mb-4">{{ number_format($sidebarScanned) }} of
-            {{ number_format($sidebarDiscovered) }} discovered pages scanned</div>
+        <div class="fs-7 text-white-50 mb-4">Đã quét {{ number_format($sidebarScanned) }} /
+            {{ number_format($sidebarDiscovered) }} trang được phát hiện</div>
         <div class="progress h-6px bg-white bg-opacity-10">
             <div class="progress-bar bg-info" role="progressbar" style="width: {{ $sidebarCoverage }}%"
                 aria-valuenow="{{ $sidebarCoverage }}" aria-valuemin="0" aria-valuemax="100"></div>
         </div>
-        <div class="fs-8 text-info mt-3">{{ $sidebarCoverage }}% portfolio coverage</div>
+        <div class="fs-8 text-info mt-3">Phạm vi toàn hệ thống {{ $sidebarCoverage }}%</div>
     </div>
 </aside>

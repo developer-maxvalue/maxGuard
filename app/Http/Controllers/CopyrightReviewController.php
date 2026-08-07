@@ -31,6 +31,6 @@ final class CopyrightReviewController extends Controller
             ],
         );
 
-        return back()->with('status', 'Manual copyright review saved.');
+        return back()->with('status', 'Đã lưu kết quả kiểm tra bản quyền thủ công.');
     }
 }

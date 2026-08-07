@@ -6,11 +6,14 @@ use App\Http\Requests\StoreWebsiteRequest;
 use App\Models\Finding;
 use App\Models\Scan;
 use App\Models\Website;
+use App\Services\AiConfiguration;
+use App\Services\WebsiteAiReviewer;
+use App\Services\CopyrightEvidenceExtractor;
 use App\Services\UrlNormalizer;
+use App\Support\UiText;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -56,26 +59,29 @@ final class SiteController extends Controller
             'domain' => $domain,
             'start_url' => $startUrl,
             'status' => 'pending',
-            'expected_monthly_revenue' => $data['expected_monthly_revenue'] ?? 0,
         ]);
 
-        return redirect()->route('sites.show', $website)->with('status', 'Website added. Run its first compliance scan when ready.');
+        return redirect()->route('sites.show', $website)->with('status', 'Đã thêm website. Bạn có thể chạy lượt quét tuân thủ đầu tiên.');
     }
 
-    public function show(Website $site): View
+    public function show(Website $site, AiConfiguration $aiConfiguration, CopyrightEvidenceExtractor $copyrightEvidence): View
     {
         $this->authorizeOwner($site);
         $site->load([
             'ga4Connection',
-            'findings' => fn ($query) => $query->open()->with('page'),
+            'findings' => fn ($query) => $query->open()->with('page.copyrightReviews'),
         ]);
+        $latestScan = $site->scans()
+            ->whereIn('status', [Scan::STATUS_COMPLETED, Scan::STATUS_PARTIAL])
+            ->latest('finished_at')
+            ->first();
         $grouped = $site->findings->groupBy('category');
         $policyDefinitions = [
-            'Prohibited & deceptive' => ['Prohibited content', 'Deceptive practices'],
-            'Copyright & duplicate' => ['Copyright', 'Duplicate content'],
-            'Content quality' => ['Content quality', 'Technical trust'],
-            'Ad experience' => ['Ad experience'],
-            'Privacy & consent' => ['Privacy & consent'],
+            'Nội dung cấm và lừa đảo' => ['Prohibited content', 'Deceptive practices'],
+            'Bản quyền và trùng lặp' => ['Copyright', 'Duplicate content'],
+            'Chất lượng nội dung' => ['Content quality', 'Technical trust'],
+            'Trải nghiệm quảng cáo' => ['Ad experience'],
+            'Quyền riêng tư và đồng ý' => ['Privacy & consent'],
         ];
 
         $policies = [];
@@ -91,7 +97,7 @@ final class SiteController extends Controller
             $policies[] = [
                 'name' => $name,
                 'score' => $score,
-                'count' => $findings->count().' findings',
+                'count' => $findings->count().' phát hiện',
                 'status' => Website::statusFromScore($score),
             ];
         }
@@ -104,21 +110,76 @@ final class SiteController extends Controller
             ->map(fn (Finding $finding): array => [
                 'finding_id' => $finding->public_id,
                 'path' => $finding->page ? (parse_url($finding->page->url, PHP_URL_PATH) ?: '/') : '/',
-                'issue' => $finding->title,
+                'issue' => UiText::text($finding->title),
                 'severity' => $finding->severity,
-                'evidence' => $finding->evidenceItems()->count(),
             ])->values()->all();
+
+        $aiEvidenceExamples = $site->findings
+            ->sortBy(fn (Finding $finding): int => match ($finding->severity) {
+                'critical' => 1, 'high' => 2, 'review' => 3, default => 4
+            })
+            ->take(10)
+            ->map(function (Finding $finding) use ($site, $copyrightEvidence): array {
+                $signals = (array) ($finding->signals ?? []);
+
+                return [
+                    'finding_id' => $finding->public_id,
+                    'url' => $finding->page?->url ?? $site->start_url,
+                    'title' => UiText::text($finding->title),
+                    'severity' => $finding->severity,
+                    'confidence' => (int) $finding->confidence,
+                    'quotes' => collect((array) ($signals['evidence'] ?? []))
+                        ->merge((array) ($signals['matching_phrases'] ?? []))
+                        ->filter(fn ($quote): bool => is_scalar($quote) && trim((string) $quote) !== '')
+                        ->map(fn ($quote): string => trim((string) $quote))
+                        ->take(3)->values()->all(),
+                    'matched_url' => is_string($signals['matched_url'] ?? null) ? $signals['matched_url'] : null,
+                    'similarity' => isset($signals['similarity']) ? (int) $signals['similarity'] : null,
+                    'source_urls' => $copyrightEvidence->sourceUrls($finding),
+                ];
+            })->values()->all();
 
         return view('sites.show', [
             'site' => array_merge($this->row($site), [
                 'policies' => $policies,
                 'risky_urls' => $riskUrls,
             ]),
-            'aiReady' => (bool) config('maxguard.ai.enabled') && filled(config('maxguard.ai.api_key')),
+            'aiReady' => $aiConfiguration->isReady(),
             'maxUrlSafetyLimit' => max(1, (int) config('maxguard.crawler.max_discovered_urls', 100_000)),
             'ga4' => $site->ga4Connection,
             'trafficPages' => $site->pages()->where('ga4_views_7d', '>', 0)->orderByDesc('ga4_views_7d')->limit(20)->get(),
+            'aiAssessment' => $latestScan?->ai_assessment,
+            'aiAssessedAt' => $latestScan?->ai_assessed_at,
+            'aiAssessmentScan' => $latestScan,
+            'aiEvidenceExamples' => $aiEvidenceExamples,
         ]);
+    }
+
+    public function assess(Website $site, AiConfiguration $configuration, WebsiteAiReviewer $reviewer): RedirectResponse
+    {
+        $this->authorizeOwner($site);
+
+        if (! $configuration->isReady()) {
+            return back()->withErrors(['ai' => 'AI chưa được cấu hình. Hãy kiểm tra Cài đặt AI trước khi đánh giá.']);
+        }
+
+        $scan = $site->scans()
+            ->whereIn('status', [Scan::STATUS_COMPLETED, Scan::STATUS_PARTIAL])
+            ->latest('finished_at')
+            ->first();
+        if ($scan === null) {
+            return back()->withErrors(['ai' => 'Website cần có ít nhất một lượt quét hoàn tất trước khi AI đánh giá.']);
+        }
+
+        try {
+            $reviewer->reviewAndStore($scan);
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return back()->withErrors(['ai' => 'Không thể hoàn tất đánh giá AI: '.mb_substr($exception->getMessage(), 0, 300)]);
+        }
+
+        return back()->with('status', 'AI đã đánh giá lại website theo dữ liệu của lượt quét gần nhất.');
     }
 
     public function destroy(Website $site): RedirectResponse
@@ -127,31 +188,17 @@ final class SiteController extends Controller
 
         if ($site->scans()->whereIn('status', [Scan::STATUS_QUEUED, Scan::STATUS_RUNNING])->exists()) {
             return back()->withErrors([
-                'site' => 'Cannot delete this website while a scan is queued or running.',
+                'site' => 'Không thể xóa website khi có lượt quét đang chờ hoặc đang chạy.',
             ]);
         }
 
-        $evidenceFiles = $site->findings()
-            ->with('evidenceItems:id,finding_id,disk,path')
-            ->get()
-            ->flatMap(fn (Finding $finding) => $finding->evidenceItems)
-            ->map(fn ($evidence): array => ['disk' => $evidence->disk, 'path' => $evidence->path])
-            ->all();
-        $siteId = $site->id;
         $domain = $site->domain;
 
         DB::transaction(fn () => $site->delete());
 
-        foreach ($evidenceFiles as $file) {
-            Storage::disk($file['disk'])->delete($file['path']);
-        }
-        $disk = (string) config('maxguard.evidence_disk', 'local');
-        $prefix = trim((string) config('maxguard.evidence_prefix', 'maxguard/evidence'), '/');
-        Storage::disk($disk)->deleteDirectory("{$prefix}/website-{$siteId}");
-
         return redirect()->route('sites.index')->with(
             'status',
-            "Website {$domain} and its scans, pages, findings and evidence were deleted."
+            "Đã xóa website {$domain} cùng các lượt quét, trang và phát hiện."
         );
     }
 
@@ -171,14 +218,13 @@ final class SiteController extends Controller
             'domain' => $website->domain,
             'score' => $website->overall_score,
             'status' => $website->status,
-            'top_risk' => $topFinding?->title ?? 'No blocking issues',
+            'top_risk' => $topFinding ? UiText::text($topFinding->title) : 'Không có vấn đề cản trở',
             'findings' => $website->open_findings_count,
-            'last_scan' => $website->last_scanned_at?->diffForHumans() ?? 'Never',
+            'last_scan' => $website->last_scanned_at?->diffForHumans() ?? 'Chưa bao giờ',
             'pages' => $scanned,
             'discovered_pages' => $discovered,
             'coverage' => $coverage,
             'coverage_partial' => (bool) $website->last_scan_partial || ($discovered > 0 && $scanned < $discovered),
-            'revenue_risk' => '$'.number_format((float) $website->findings()->open()->sum('revenue_impact'), 0),
         ];
     }
 
@@ -208,21 +254,20 @@ final class SiteController extends Controller
     {
         return response()->streamDownload(function () use ($query): void {
             $output = fopen('php://output', 'wb');
-            fputcsv($output, ['Name', 'Domain', 'Status', 'Score', 'Stored pages', 'Discovered last scan', 'Scanned last scan', 'Partial', 'Open findings', 'Expected monthly revenue', 'Last scanned']);
+            fputcsv($output, ['Tên', 'Tên miền', 'Trạng thái', 'Điểm', 'Trang đã lưu', 'Được phát hiện lần quét cuối', 'Đã quét lần cuối', 'Một phần', 'Phát hiện đang mở', 'Lần quét cuối']);
 
             $query->reorder('id')->chunkById(500, function ($websites) use ($output): void {
                 foreach ($websites as $website) {
                     fputcsv($output, [
                         $website->name,
                         $website->domain,
-                        $website->status,
+                        UiText::label($website->status),
                         $website->overall_score,
                         $website->pages_count,
                         $website->last_discovered_pages,
                         $website->last_scanned_pages,
-                        $website->last_scan_partial ? 'yes' : 'no',
+                        $website->last_scan_partial ? 'có' : 'không',
                         $website->open_findings_count,
-                        $website->expected_monthly_revenue,
                         $website->last_scanned_at?->toIso8601String(),
                     ]);
                 }

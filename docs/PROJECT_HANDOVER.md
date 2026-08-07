@@ -64,7 +64,6 @@ flowchart LR
     PW --> LOCAL[Local Detectors]
     PW --> SE[Sightengine API]
     PW --> AI[Gemini hoặc OpenAI]
-    PW --> EV[EvidenceStore]
     PW --> TEL[ScanTelemetry]
 
     CTL --> GA[Google OAuth]
@@ -89,7 +88,7 @@ flowchart LR
 - `SightengineTextAnalyzer`: adapter API Sightengine.
 - `AiPolicyAnalyzer`: adapter Gemini/OpenAI, chuyển output thành `DetectorResult`.
 - `Ga4TrafficService`: lấy pagePath/page views 7 ngày.
-- `EvidenceStore`: snapshot và bằng chứng bất biến.
+- Signals, URL đối chiếu và câu trích dẫn được lưu trực tiếp trên finding; hệ thống không lưu file evidence.
 - `ScanTelemetry`: event đã làm sạch cho từng stage/URL.
 - `RiskScoreCalculator`: tính điểm tổng hợp từ finding đang mở.
 
@@ -116,7 +115,6 @@ flowchart TB
         SightengineTextAnalyzer
         AiPolicyAnalyzer
         Ga4TrafficService
-        EvidenceStore
         ScanTelemetry
     end
 

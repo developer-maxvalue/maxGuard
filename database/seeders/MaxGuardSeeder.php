@@ -17,10 +17,10 @@ final class MaxGuardSeeder extends Seeder
         $ownerId = User::query()->value('id');
 
         $sites = [
-            ['name' => 'Star Hot News', 'domain' => 'starhotnews.kingka.info', 'score' => 62, 'status' => 'critical', 'revenue' => 12800, 'pages' => 1284],
-            ['name' => 'Daily Trend Hub', 'domain' => 'dailytrendhub.com', 'score' => 74, 'status' => 'high', 'revenue' => 8400, 'pages' => 906],
-            ['name' => 'How To Finance', 'domain' => 'howtofinance.net', 'score' => 81, 'status' => 'review', 'revenue' => 3100, 'pages' => 632],
-            ['name' => 'Fresh Home Ideas', 'domain' => 'freshhomeideas.co', 'score' => 96, 'status' => 'healthy', 'revenue' => 1800, 'pages' => 418],
+            ['name' => 'Tin Nóng Ngôi Sao', 'domain' => 'starhotnews.kingka.info', 'score' => 62, 'status' => 'critical', 'pages' => 1284],
+            ['name' => 'Xu Hướng Hằng Ngày', 'domain' => 'dailytrendhub.com', 'score' => 74, 'status' => 'high', 'pages' => 906],
+            ['name' => 'Hướng Dẫn Tài Chính', 'domain' => 'howtofinance.net', 'score' => 81, 'status' => 'review', 'pages' => 632],
+            ['name' => 'Ý Tưởng Nhà Đẹp', 'domain' => 'freshhomeideas.co', 'score' => 96, 'status' => 'healthy', 'pages' => 418],
         ];
 
         foreach ($sites as $index => $data) {
@@ -31,7 +31,6 @@ final class MaxGuardSeeder extends Seeder
                 'start_url' => 'https://'.$data['domain'].'/',
                 'status' => $data['status'],
                 'overall_score' => $data['score'],
-                'expected_monthly_revenue' => $data['revenue'],
                 'pages_count' => $data['pages'],
                 'last_discovered_pages' => $data['pages'],
                 'last_scanned_pages' => $data['pages'],
@@ -65,16 +64,16 @@ final class MaxGuardSeeder extends Seeder
                 'last_scan_id' => $scan->id,
                 'url' => $website->start_url.'qu-dean-martins-unforgettable-london-comedy-moment-that-broke-everyone-into-laughter/',
                 'status_code' => 200,
-                'title' => "Dean Martin's unforgettable London comedy moment",
+                'title' => 'Khoảnh khắc hài đáng nhớ của Dean Martin tại London',
                 'word_count' => 486,
                 'ad_count' => 7,
                 'last_scanned_at' => $scan->finished_at,
             ]);
 
             $findings = [
-                ['id' => 'MG-1042', 'rule' => 'copyright.media-provenance-unverified', 'category' => 'Copyright', 'severity' => 'critical', 'confidence' => 96, 'title' => 'Copied article and unlicensed media', 'summary' => 'The page requires manual verification of text and media ownership.', 'policy' => 'Google Publisher Policies — intellectual property abuse'],
-                ['id' => 'MG-1038', 'rule' => 'duplicate.internal-near-match', 'category' => 'Duplicate content', 'severity' => 'critical', 'confidence' => 92, 'title' => 'Substantial content similarity', 'summary' => 'The article substantially overlaps another indexed page.', 'policy' => 'Google Publisher Policies — low-value/reused inventory review'],
-                ['id' => 'MG-1019', 'rule' => 'ads.density-review', 'category' => 'Ad experience', 'severity' => 'review', 'confidence' => 79, 'title' => 'Mobile ad density exceeds threshold', 'summary' => 'The content-to-ad ratio requires a manual mobile review.', 'policy' => 'Google Publisher Policies — ad placement review'],
+                ['id' => 'MG-1042', 'rule' => 'copyright.media-provenance-unverified', 'category' => 'Copyright', 'severity' => 'critical', 'confidence' => 96, 'title' => 'Bài viết sao chép và nội dung đa phương tiện chưa được cấp phép', 'summary' => 'Trang cần được xác minh thủ công về quyền sở hữu văn bản và nội dung đa phương tiện.', 'policy' => 'Chính sách dành cho nhà xuất bản của Google — lạm dụng quyền sở hữu trí tuệ'],
+                ['id' => 'MG-1038', 'rule' => 'duplicate.internal-near-match', 'category' => 'Duplicate content', 'severity' => 'critical', 'confidence' => 92, 'title' => 'Nội dung có độ tương đồng đáng kể', 'summary' => 'Bài viết trùng lặp đáng kể với một trang khác đã được lập chỉ mục.', 'policy' => 'Chính sách dành cho nhà xuất bản của Google — xem xét nội dung giá trị thấp hoặc tái sử dụng'],
+                ['id' => 'MG-1019', 'rule' => 'ads.density-review', 'category' => 'Ad experience', 'severity' => 'review', 'confidence' => 79, 'title' => 'Mật độ quảng cáo trên thiết bị di động vượt ngưỡng', 'summary' => 'Tỷ lệ nội dung trên quảng cáo cần được kiểm tra thủ công trên thiết bị di động.', 'policy' => 'Chính sách dành cho nhà xuất bản của Google — xem xét vị trí quảng cáo'],
             ];
 
             foreach ($findings as $findingData) {
@@ -94,7 +93,7 @@ final class MaxGuardSeeder extends Seeder
                     'summary' => $findingData['summary'],
                     'policy_reference' => $findingData['policy'],
                     'signals' => ['demo_evidence' => true, 'manual_review_required' => true],
-                    'remediation' => ['Review the evidence.', 'Verify rights or remove the affected material.', 'Run a follow-up scan.'],
+                    'remediation' => ['Xem xét bằng chứng.', 'Xác minh quyền sử dụng hoặc xóa nội dung bị ảnh hưởng.', 'Chạy lượt quét theo dõi.'],
                     'first_seen_at' => $scan->finished_at,
                     'last_seen_at' => $scan->finished_at,
                 ]);

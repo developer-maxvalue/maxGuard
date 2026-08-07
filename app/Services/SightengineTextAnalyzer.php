@@ -104,8 +104,8 @@ final class SightengineTextAnalyzer
                     category: 'Third-party moderation',
                     severity: $value >= 0.85 ? 'high' : 'review',
                     confidence: (int) round($value * 100),
-                    title: 'Sightengine detected '.str_replace('_', ' ', (string) $class).' content',
-                    summary: 'An external text moderation model scored this content at '.number_format($value * 100, 1).'%. A human should verify the context.',
+                    title: 'Sightengine phát hiện nội dung '.str_replace('_', ' ', (string) $class),
+                    summary: 'Mô hình kiểm duyệt văn bản bên ngoài chấm nội dung này ở mức '.number_format($value * 100, 1).'%. Người phụ trách cần xác minh ngữ cảnh.',
                     policyReference: 'Sightengine text moderation: '.(string) $class,
                     signals: [
                         'analysis_source' => 'sightengine',
@@ -113,7 +113,7 @@ final class SightengineTextAnalyzer
                         'score' => $value,
                         'request_id' => $response->json('request.id'),
                     ],
-                    remediation: ['Review the quoted page in context.', 'Edit or remove violating language, then force a new scan.'],
+                    remediation: ['Xem xét trang được trích dẫn trong đúng ngữ cảnh.', 'Chỉnh sửa hoặc xóa ngôn từ vi phạm rồi buộc chạy lượt quét mới.'],
                 );
             }
 

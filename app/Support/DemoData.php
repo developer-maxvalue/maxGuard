@@ -12,7 +12,7 @@ final class DemoData
             ['label' => 'Total sites', 'value' => '24', 'note' => '21 monitored', 'tone' => 'primary', 'icon' => 'bi-globe2'],
             ['label' => 'Compliance score', 'value' => '87', 'note' => '4.2% higher this month', 'tone' => 'success', 'icon' => 'bi-shield-check'],
             ['label' => 'Critical issues', 'value' => '7', 'note' => '3 require action today', 'tone' => 'danger', 'icon' => 'bi-exclamation-triangle'],
-            ['label' => 'Protected revenue', 'value' => '$48.2K', 'note' => 'estimated monthly', 'tone' => 'info', 'icon' => 'bi-currency-dollar'],
+            ['label' => 'High issues', 'value' => '12', 'note' => 'require early remediation', 'tone' => 'warning', 'icon' => 'bi-shield-exclamation'],
         ];
     }
 
@@ -34,7 +34,6 @@ final class DemoData
                 'last_scan' => '8 min ago',
                 'pages' => 1284,
                 'coverage' => 98.4,
-                'revenue_risk' => '$12.8K/mo',
             ],
             [
                 'slug' => 'dailytrendhub-com',
@@ -46,7 +45,6 @@ final class DemoData
                 'last_scan' => '36 min ago',
                 'pages' => 906,
                 'coverage' => 94.7,
-                'revenue_risk' => '$8.4K/mo',
             ],
             [
                 'slug' => 'howtofinance-net',
@@ -58,7 +56,6 @@ final class DemoData
                 'last_scan' => '2 hours ago',
                 'pages' => 632,
                 'coverage' => 96.1,
-                'revenue_risk' => '$3.1K/mo',
             ],
             [
                 'slug' => 'freshhomeideas-co',
@@ -70,7 +67,6 @@ final class DemoData
                 'last_scan' => 'Yesterday',
                 'pages' => 418,
                 'coverage' => 99.8,
-                'revenue_risk' => '$0',
             ],
         ];
     }
@@ -135,4 +131,3 @@ final class DemoData
         ]);
     }
 }
-

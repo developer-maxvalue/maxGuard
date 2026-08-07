@@ -21,7 +21,6 @@ final class Website extends Model
         'start_url',
         'status',
         'overall_score',
-        'expected_monthly_revenue',
         'pages_count',
         'last_discovered_pages',
         'last_scanned_pages',
@@ -33,7 +32,6 @@ final class Website extends Model
     ];
 
     protected $casts = [
-        'expected_monthly_revenue' => 'decimal:2',
         'settings' => 'array',
         'last_scan_partial' => 'boolean',
         'last_scanned_at' => 'datetime',

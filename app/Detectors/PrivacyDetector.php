@@ -26,11 +26,11 @@ final class PrivacyDetector implements Detector
                 category: 'Privacy & consent',
                 severity: 'high',
                 confidence: 94,
-                title: 'Privacy or cookie disclosure link not found',
-                summary: 'The home page did not expose a discoverable privacy or cookie disclosure link.',
-                policyReference: 'Google Publisher Policies — privacy-related disclosures',
+                title: 'Không tìm thấy liên kết thông báo quyền riêng tư hoặc cookie',
+                summary: 'Trang chủ không hiển thị liên kết dễ tìm đến thông báo về quyền riêng tư hoặc cookie.',
+                policyReference: 'Chính sách dành cho nhà xuất bản của Google — thông báo liên quan đến quyền riêng tư',
                 signals: ['privacy_link_found' => false],
-                remediation: ['Publish an accurate privacy policy and link it from persistent site navigation or footer.'],
+                remediation: ['Đăng chính sách quyền riêng tư chính xác và liên kết từ điều hướng cố định hoặc chân trang.'],
             );
         }
 
@@ -40,15 +40,14 @@ final class PrivacyDetector implements Detector
                 category: 'Privacy & consent',
                 severity: 'review',
                 confidence: 72,
-                title: 'Consent management signal was not detected',
-                summary: 'Ads were detected but common CMP/cookie-consent markers were not present in the initial HTML.',
-                policyReference: 'Google consent requirements — implementation review',
+                title: 'Không phát hiện tín hiệu quản lý sự đồng ý',
+                summary: 'Đã phát hiện quảng cáo nhưng HTML ban đầu không có các dấu hiệu CMP hoặc đồng ý cookie phổ biến.',
+                policyReference: 'Yêu cầu về sự đồng ý của Google — xem xét cách triển khai',
                 signals: ['ad_count' => $page->adCount, 'cmp_signal_found' => false],
-                remediation: ['Verify CMP behavior in a real browser by region; server HTML alone cannot prove consent compliance.'],
+                remediation: ['Xác minh hoạt động CMP trên trình duyệt thực theo từng khu vực; chỉ HTML máy chủ không thể chứng minh việc tuân thủ sự đồng ý.'],
             );
         }
 
         return $results;
     }
 }
-

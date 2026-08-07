@@ -1,15 +1,15 @@
 @extends('layouts.app')
 
-@section('title', 'Sites')
+@section('title', 'Website')
 
 @section('content')
     <div class="mg-page-heading">
         <div>
-            <h1>Sites</h1>
-            <p>Monitor AdSense compliance health and coverage across your portfolio.</p>
+            <h1>Website</h1>
+            <p>Giám sát tình trạng tuân thủ AdSense và phạm vi quét trên toàn hệ thống.</p>
         </div>
         <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addWebsiteModal"><i
-                class="bi bi-plus-lg me-2"></i>Add website</button>
+                class="bi bi-plus-lg me-2"></i>Thêm website</button>
     </div>
 
     <div class="card mg-card">
@@ -18,21 +18,21 @@
                 <div class="position-relative">
                     <i class="bi bi-search position-absolute top-50 translate-middle-y ms-4 text-muted"></i>
                     <input type="search" name="q" value="{{ request('q') }}"
-                        class="form-control form-control-solid ps-10 w-300px" placeholder="Search domain"
-                        aria-label="Search websites">
+                        class="form-control form-control-solid ps-10 w-300px" placeholder="Tìm tên miền"
+                        aria-label="Tìm website">
                 </div>
             </div>
             <div class="card-toolbar d-flex gap-3">
                 <select name="status" class="form-select form-select-solid w-150px" onchange="this.form.submit()">
-                    <option value="">All statuses</option>
-                    <option value="critical" @selected(request('status') === 'critical')>Critical</option>
-                    <option value="high" @selected(request('status') === 'high')>High</option>
-                    <option value="review" @selected(request('status') === 'review')>Review</option>
-                    <option value="healthy" @selected(request('status') === 'healthy')>Healthy</option>
-                    <option value="pending" @selected(request('status') === 'pending')>Pending</option>
+                    <option value="">Tất cả trạng thái</option>
+                    <option value="critical" @selected(request('status') === 'critical')>Nghiêm trọng</option>
+                    <option value="high" @selected(request('status') === 'high')>Cao</option>
+                    <option value="review" @selected(request('status') === 'review')>Cần xem xét</option>
+                    <option value="healthy" @selected(request('status') === 'healthy')>Tốt</option>
+                    <option value="pending" @selected(request('status') === 'pending')>Đang chờ</option>
                 </select>
                 <button class="btn btn-light" name="export" value="csv"><i
-                        class="bi bi-download me-2"></i>Export</button>
+                        class="bi bi-download me-2"></i>Xuất dữ liệu</button>
             </div>
         </form>
         <div class="card-body pt-2">
@@ -41,11 +41,11 @@
                     <thead>
                         <tr class="text-uppercase text-muted fs-8">
                             <th>Website</th>
-                            <th>Health</th>
-                            <th>Pages</th>
-                            <th>Coverage</th>
-                            <th>Revenue risk</th>
-                            <th>Last scan</th>
+                            <th>Tình trạng</th>
+                            <th>Trang</th>
+                            <th>Phạm vi</th>
+                            <th>Vấn đề ưu tiên</th>
+                            <th>Lần quét cuối</th>
                             <th></th>
                         </tr>
                     </thead>
@@ -55,8 +55,7 @@
                                 <td>
                                     <a href="{{ route('sites.show', $site['slug']) }}" class="mg-site-cell">
                                         <span>{{ strtoupper(substr($site['domain'], 0, 1)) }}</span>
-                                        <div><strong>{{ $site['domain'] }}</strong><small>{{ $site['findings'] }} open
-                                                findings</small></div>
+                                        <div><strong>{{ $site['domain'] }}</strong><small>{{ $site['findings'] }} phát hiện đang mở</small></div>
                                     </a>
                                 </td>
                                 <td>
@@ -66,8 +65,7 @@
                                     </div>
                                 </td>
                                 <td><strong>{{ number_format($site['pages']) }}</strong><span
-                                        class="d-block text-muted fs-9">of
-                                        {{ number_format($site['discovered_pages']) }} discovered</span></td>
+                                        class="d-block text-muted fs-9">/ {{ number_format($site['discovered_pages']) }} trang được phát hiện</span></td>
                                 <td>
                                     <div class="d-flex align-items-center gap-3">
                                         <div class="progress w-80px h-6px">
@@ -77,9 +75,7 @@
                                             class="{{ $site['coverage_partial'] ? 'text-warning' : '' }}">{{ $site['coverage'] }}%</span>
                                     </div>
                                 </td>
-                                <td
-                                    class="fw-semibold {{ $site['revenue_risk'] === '$0' ? 'text-success' : 'text-danger' }}">
-                                    {{ $site['revenue_risk'] }}</td>
+                                <td class="text-gray-700">{{ $site['top_risk'] }}</td>
                                 <td class="text-muted">{{ $site['last_scan'] }}</td>
                                 <td class="text-end"><a href="{{ route('sites.show', $site['slug']) }}"
                                         class="btn btn-sm btn-icon btn-light"><i class="bi bi-arrow-right"></i></a></td>
@@ -100,21 +96,21 @@
                 @csrf
                 <div class="modal-header border-0">
                     <div>
-                        <h2 class="modal-title" id="addWebsiteTitle">Add website</h2>
-                        <p class="text-muted fs-7 mb-0 mt-2">Only add domains you own or are authorized to audit.</p>
+                        <h2 class="modal-title" id="addWebsiteTitle">Thêm website</h2>
+                        <p class="text-muted fs-7 mb-0 mt-2">Chỉ thêm tên miền bạn sở hữu hoặc được phép kiểm tra.</p>
                     </div><button type="button" class="btn btn-sm btn-icon btn-light" data-bs-dismiss="modal"><i
                             class="bi bi-x-lg"></i></button>
                 </div>
                 <div class="modal-body pt-2">
-                    <div class="mb-5"><label class="form-label fw-semibold">Display name</label><input type="text"
+                    <div class="mb-5"><label class="form-label fw-semibold">Tên hiển thị</label><input type="text"
                             name="name" value="{{ old('name') }}"
                             class="form-control form-control-solid @error('name') is-invalid @enderror"
-                            placeholder="Publisher website">
+                            placeholder="Website nhà xuất bản">
                         @error('name')
                             <div class="invalid-feedback">{{ $message }}</div>
                         @enderror
                     </div>
-                    <div class="mb-5"><label class="form-label fw-semibold">Start URL</label><input type="url"
+                    <div class="mb-5"><label class="form-label fw-semibold">URL bắt đầu</label><input type="url"
                             name="start_url" value="{{ old('start_url') }}"
                             class="form-control form-control-solid @error('start_url') is-invalid @enderror"
                             placeholder="https://example.com/">
@@ -122,20 +118,11 @@
                             <div class="invalid-feedback">{{ $message }}</div>
                         @enderror
                         <div class="form-text">
-                            Private IPs, localhost and non-standard ports are blocked.</div>
-                    </div>
-                    <div><label class="form-label fw-semibold">Estimated monthly AdSense revenue</label>
-                        <div class="input-group input-group-solid"><span class="input-group-text">$</span><input
-                                type="number" min="0" step="0.01" name="expected_monthly_revenue"
-                                value="{{ old('expected_monthly_revenue', 0) }}"
-                                class="form-control @error('expected_monthly_revenue') is-invalid @enderror"></div>
-                        @error('expected_monthly_revenue')
-                            <div class="invalid-feedback d-block">{{ $message }}</div>
-                        @enderror
+                            IP riêng, localhost và cổng không tiêu chuẩn sẽ bị chặn.</div>
                     </div>
                 </div>
                 <div class="modal-footer border-0"><button type="button" class="btn btn-light"
-                        data-bs-dismiss="modal">Cancel</button><button class="btn btn-primary">Add website</button></div>
+                        data-bs-dismiss="modal">Hủy</button><button class="btn btn-primary">Thêm website</button></div>
             </form>
         </div>
     </div>
