@@ -28,6 +28,20 @@
         </div>
     </div>
 
+    <div class="card mg-card mb-5">
+        <div class="card-body p-5">
+            <div class="d-flex align-items-start gap-3">
+                <i class="bi bi-link-45deg fs-3 text-primary"></i>
+                <div class="min-w-0">
+                    <div class="mg-eyebrow mb-2">{{ $finding['page_id'] ? 'URL bị ảnh hưởng' : 'Phạm vi toàn website' }}</div>
+                    <a class="d-block text-break fw-semibold" href="{{ $finding['url'] }}" target="_blank" rel="noopener noreferrer">
+                        {{ $finding['url'] }}
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
     @if($finding['page_id'])
         @php($review = $finding['copyright_review'])
         <div class="card mg-card mb-5"><div class="card-body p-6">
