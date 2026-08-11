@@ -35,8 +35,10 @@ final class ExternalCopyAnalyzer
     {
         $minimumWords = max(50, (int) config('maxguard.external_copy.minimum_words', 250));
         $this->lastTrace = ['configured' => $this->isConfigured(), 'attempted' => false];
-        if (! $this->isConfigured() || $page->wordCount < $minimumWords) {
-            $this->lastTrace['skipped_reason'] = ! $this->isConfigured() ? 'not_configured' : 'page_too_short';
+        if (! $this->isConfigured() || $page->wordCount < $minimumWords || $page->isContentListingPage()) {
+            $this->lastTrace['skipped_reason'] = ! $this->isConfigured()
+                ? 'not_configured'
+                : ($page->isContentListingPage() ? 'content_listing' : 'page_too_short');
 
             return [];
         }

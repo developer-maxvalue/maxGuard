@@ -11,7 +11,7 @@ final class DuplicateContentDetectorTest extends TestCase
     public function test_sketch_index_finds_a_near_duplicate_without_comparing_every_page_pair(): void
     {
         config()->set('maxguard.thresholds.duplicate_similarity', 0.80);
-        $detector = new DuplicateContentDetector();
+        $detector = new DuplicateContentDetector;
         $text = implode(' ', array_map(fn (int $index): string => 'original-word-'.$index, range(1, 220)));
 
         $first = $this->page('https://example.com/first', $text);
@@ -24,6 +24,29 @@ final class DuplicateContentDetectorTest extends TestCase
         $this->assertSame('duplicate.internal-near-match', $results[0]->ruleKey);
         $this->assertSame('https://example.com/first', $results[0]->signals['matched_url']);
         $this->assertNotEmpty($results[0]->signals['matching_phrases']);
+    }
+
+    public function test_tag_and_category_listings_are_not_indexed_as_duplicate_articles(): void
+    {
+        config()->set('maxguard.thresholds.duplicate_similarity', 0.80);
+        $detector = new DuplicateContentDetector;
+        $text = implode(' ', array_map(fn (int $index): string => 'shared-word-'.$index, range(1, 220)));
+
+        $this->assertSame([], $detector->detect($this->page(
+            'https://www.ninhtito.com/blog/tag/khu+du+l%E1%BB%8Bch',
+            $text,
+        )));
+        $this->assertSame([], $detector->detect($this->page(
+            'https://www.ninhtito.com/blog/category/du-lich',
+            $text,
+        )));
+
+        // The listings were not remembered, so a real article with the same
+        // template/excerpt text must not match either listing.
+        $this->assertSame([], $detector->detect($this->page(
+            'https://www.ninhtito.com/blog/bai-viet-that',
+            $text,
+        )));
     }
 
     private function page(string $url, string $text): PageDocument

@@ -27,7 +27,7 @@ final class DuplicateContentDetector implements Detector
 
     public function detect(PageDocument $page): array
     {
-        if ($page->wordCount < 150) {
+        if ($page->wordCount < 150 || $page->isContentListingPage()) {
             return [];
         }
 
@@ -37,7 +37,7 @@ final class DuplicateContentDetector implements Detector
     /** @return array<string, string> */
     public function sketchFor(PageDocument $page): array
     {
-        if ($page->wordCount < 150) {
+        if ($page->wordCount < 150 || $page->isContentListingPage()) {
             return [];
         }
 

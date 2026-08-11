@@ -12,7 +12,7 @@ final class PageInspector
 {
     public function inspect(CrawlResponse $response): PageDocument
     {
-        $dom = new DOMDocument();
+        $dom = new DOMDocument;
         $previous = libxml_use_internal_errors(true);
         $dom->loadHTML('<?xml encoding="utf-8" ?>'.$response->body, LIBXML_NOWARNING | LIBXML_NOERROR | LIBXML_NONET);
         libxml_clear_errors();
@@ -22,6 +22,7 @@ final class PageInspector
         $title = trim((string) ($xpath->query('//title')->item(0)?->textContent ?? ''));
         $canonical = $xpath->query('//link[contains(translate(@rel,"ABCDEFGHIJKLMNOPQRSTUVWXYZ","abcdefghijklmnopqrstuvwxyz"),"canonical")]/@href')->item(0)?->nodeValue;
         $language = $xpath->query('/html/@lang')->item(0)?->nodeValue;
+        $bodyClass = $xpath->query('//body/@class')->item(0)?->nodeValue;
         $h1Count = $xpath->query('//h1')->length;
 
         $links = [];
@@ -93,6 +94,7 @@ final class PageInspector
                 'external_images' => $externalImages,
                 'external_image_urls' => array_values(array_unique($externalImageUrls)),
                 'images_missing_alt' => $missingAlt,
+                'body_class' => is_string($bodyClass) ? trim($bodyClass) : '',
             ],
         );
     }

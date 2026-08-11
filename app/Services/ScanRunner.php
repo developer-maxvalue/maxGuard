@@ -372,8 +372,10 @@ final class ScanRunner
                 }
                 $externalCopyReady = app(ExternalCopyAnalyzer::class)->isConfigured();
                 $externalCopyCheckedThisPage = $externalCopyReady
-                    && $document->wordCount < max(50, (int) config('maxguard.external_copy.minimum_words', 250));
+                    && ($document->isContentListingPage()
+                        || $document->wordCount < max(50, (int) config('maxguard.external_copy.minimum_words', 250)));
                 if ($document->wordCount >= max(50, (int) config('maxguard.external_copy.minimum_words', 250))
+                    && ! $document->isContentListingPage()
                     && $this->shouldRunAddon($scan, 'external_copy', $externalCopyAnalyzed, ['full', 'copyright', 'priority'])) {
                     $externalCopyAnalyzer = app(ExternalCopyAnalyzer::class);
                     $copyResults = $externalCopyAnalyzer->analyze($document);
@@ -531,10 +533,12 @@ final class ScanRunner
 
         $externalCopy = app(ExternalCopyAnalyzer::class);
         $externalCopyChecked = $externalCopy->isConfigured()
-            && $document->wordCount < max(50, (int) config('maxguard.external_copy.minimum_words', 250));
+            && ($document->isContentListingPage()
+                || $document->wordCount < max(50, (int) config('maxguard.external_copy.minimum_words', 250)));
         $copyStarted = $telemetry->start($target, 'external_copy', 'Tavily Search', 'Searching for and comparing similar content on other websites.');
         $copyResults = [];
         if ($document->wordCount >= max(50, (int) config('maxguard.external_copy.minimum_words', 250))
+            && ! $document->isContentListingPage()
             && $this->reserveParallelAddon($scan->id, 'external_copy', ['full', 'copyright', 'priority'])) {
             $copyResults = $this->detectors->filter($externalCopy->analyze($document), $scan->type);
             $externalCopyChecked = ! isset($externalCopy->lastTrace()['error']);
@@ -990,6 +994,7 @@ final class ScanRunner
     ): Page {
         $hash = hash('sha256', $document->url);
         $meta = $document->meta;
+        $meta['page_type'] = $document->pageType();
         if ($analysisMarker !== null) {
             $meta['maxguard_analysis'] = $analysisMarker;
         }
