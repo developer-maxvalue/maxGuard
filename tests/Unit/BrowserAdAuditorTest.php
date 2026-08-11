@@ -32,4 +32,17 @@ final class BrowserAdAuditorTest extends TestCase
         $this->assertContains('ads.browser-viewport-dominance', $keys);
         $this->assertContains('ads.browser-popup-or-refresh', $keys);
     }
+
+    public function test_it_reads_the_node_helper_error_from_stdout(): void
+    {
+        $method = new ReflectionMethod(BrowserAdAuditor::class, 'processFailureMessage');
+        $message = $method->invoke(
+            app(BrowserAdAuditor::class),
+            json_encode(['ok' => false, 'error' => 'Executable does not exist at /browser/chromium']),
+            '',
+            1,
+        );
+
+        $this->assertSame('Executable does not exist at /browser/chromium', $message);
+    }
 }

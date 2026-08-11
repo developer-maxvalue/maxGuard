@@ -53,8 +53,13 @@ final class BrowserAdAuditor
             $process->run();
 
             $this->lastTrace['attempted'] = true;
+            $this->lastTrace['process_exit_code'] = $process->getExitCode();
             if (! $process->isSuccessful()) {
-                throw new \RuntimeException(trim($process->getErrorOutput()) ?: 'Browser audit process failed.');
+                throw new \RuntimeException($this->processFailureMessage(
+                    $process->getOutput(),
+                    $process->getErrorOutput(),
+                    $process->getExitCode(),
+                ));
             }
 
             $payload = json_decode($process->getOutput(), true, 512, JSON_THROW_ON_ERROR);
@@ -75,6 +80,25 @@ final class BrowserAdAuditor
 
             return [];
         }
+    }
+
+    private function processFailureMessage(string $output, string $errorOutput, ?int $exitCode): string
+    {
+        $output = trim($output);
+        if ($output !== '') {
+            $payload = json_decode($output, true);
+            $message = is_array($payload) ? ($payload['error'] ?? null) : null;
+            if (is_string($message) && trim($message) !== '') {
+                return mb_substr(trim($message), 0, 1000);
+            }
+        }
+
+        $errorOutput = trim($errorOutput);
+        if ($errorOutput !== '') {
+            return mb_substr($errorOutput, 0, 1000);
+        }
+
+        return 'Browser audit process failed'.($exitCode === null ? '.' : " with exit code {$exitCode}.");
     }
 
     /** @param list<array<string, mixed>> $viewports @return list<DetectorResult> */
