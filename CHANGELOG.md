@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.0-laravel10 — 2026-08-11
+
+- Thêm Playwright/Chromium audit trên desktop và mobile để phát hiện quảng cáo gần nút tương tác, overlay, nhãn gây hiểu nhầm, quảng cáo lấn viewport, popup và dấu hiệu tự refresh.
+- Chặn localhost, private/reserved IP và port lạ cho URL chính, redirect và mọi subresource do trình duyệt tải.
+- Thêm tìm kiếm nội dung sao chép ngoài website qua Tavily Search, sau đó tự fetch an toàn và so khớp bằng 5-word shingle containment.
+- Lưu URL đối chiếu, tỷ lệ tương đồng và cụm từ trùng khớp trong finding để phục vụ human review.
+- Thêm page cap, telemetry, incremental coverage marker, cấu hình môi trường và kiểm thử thuật toán so khớp.
+
 ## 1.2.0-laravel10 — 2026-07-22
 
 - Đổi pipeline từ một job xử lý cả scan thành orchestrator → nhiều page-batch jobs → finalizer.

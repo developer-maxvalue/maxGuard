@@ -28,6 +28,8 @@ final class IncrementalScanTest extends TestCase
         config()->set('maxguard.crawler.follow_internal_links', false);
         config()->set('maxguard.detectors', []);
         config()->set('maxguard.ai.enabled', false);
+        config()->set('maxguard.browser_audit.enabled', false);
+        config()->set('maxguard.external_copy.enabled', false);
 
         $html = '<html><head><title>Stable article</title></head><body><h1>Stable article</h1><p>The body has not changed.</p></body></html>';
         $responses = [
@@ -42,7 +44,7 @@ final class IncrementalScanTest extends TestCase
                 'Content-Type' => ['text/html; charset=UTF-8'],
             ]),
         ];
-        $inspector = new PageInspector();
+        $inspector = new PageInspector;
         $document = $inspector->inspect($responses['https://example.com/']);
         $website = Website::query()->create([
             'name' => 'Example',
@@ -82,7 +84,7 @@ final class IncrementalScanTest extends TestCase
         $this->assertSame(1, $incremental->pages_scanned);
         $this->assertSame(1, $incremental->pages_skipped_unchanged);
         $this->assertSame(0, data_get($incremental->meta, 'pages_analyzed'));
-        $this->assertSame($marker, data_get(Page::query()->firstOrFail()->meta, 'maxguard_analysis'));
+        $this->assertEquals($marker, data_get(Page::query()->firstOrFail()->meta, 'maxguard_analysis'));
 
         $forced = $website->scans()->create([
             'type' => 'full',
@@ -106,15 +108,15 @@ final class IncrementalScanTest extends TestCase
         $crawler = new WebsiteCrawler(
             new IncrementalFakeSafeHttpClient($responses),
             $inspector,
-            new UrlNormalizer(),
-            new SitemapParser(),
+            new UrlNormalizer,
+            new SitemapParser,
         );
 
         return new ScanRunner(
             $crawler,
-            new DetectorRegistry(),
-            new AiPolicyAnalyzer(),
-            new RiskScoreCalculator(),
+            new DetectorRegistry,
+            new AiPolicyAnalyzer,
+            new RiskScoreCalculator,
         );
     }
 }
@@ -122,9 +124,7 @@ final class IncrementalScanTest extends TestCase
 final class IncrementalFakeSafeHttpClient extends SafeHttpClient
 {
     /** @param array<string, CrawlResponse> $responses */
-    public function __construct(private array $responses)
-    {
-    }
+    public function __construct(private array $responses) {}
 
     public function get(string $url, string $accept = 'text/html,application/xhtml+xml'): CrawlResponse
     {

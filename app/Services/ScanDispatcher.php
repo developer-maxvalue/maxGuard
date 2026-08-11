@@ -60,7 +60,7 @@ final class ScanDispatcher
                 'max_urls' => $maxUrls,
                 'use_ai' => $useAi,
                 'force_rescan' => $forceRescan,
-                'ruleset_version' => '1.1.1',
+                'ruleset_version' => '1.3.0',
             ]);
 
             $locked->update(['status' => 'scanning']);
@@ -79,7 +79,7 @@ final class ScanDispatcher
                 'finished_at' => now(),
                 'error_message' => mb_substr($exception->getMessage(), 0, 5000),
             ]);
-            $website->update(['status' => $previousStatus]);
+            Website::query()->whereKey($website->id)->update(['status' => $previousStatus]);
 
             throw ValidationException::withMessages([
                 'queue' => 'The scan could not be added to the queue. Run [php artisan maxguard:queue-doctor] and check the queue worker.',

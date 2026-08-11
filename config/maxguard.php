@@ -63,6 +63,34 @@ return [
         'timeout_seconds' => (int) env('SIGHTENGINE_TIMEOUT', 45),
     ],
 
+    // Optional real-browser audit. The Node helper blocks private/reserved
+    // network destinations for the main page and every subresource.
+    'browser_audit' => [
+        'enabled' => (bool) env('MAXGUARD_BROWSER_AUDIT_ENABLED', false),
+        'node_binary' => env('MAXGUARD_NODE_BINARY', 'node'),
+        'script' => env('MAXGUARD_BROWSER_AUDIT_SCRIPT', base_path('scripts/browser-ad-audit.mjs')),
+        'max_pages_per_scan' => (int) env('MAXGUARD_BROWSER_MAX_PAGES_PER_SCAN', 50),
+        'timeout_seconds' => (int) env('MAXGUARD_BROWSER_TIMEOUT', 45),
+        'settle_ms' => (int) env('MAXGUARD_BROWSER_SETTLE_MS', 2500),
+        'proximity_px' => (int) env('MAXGUARD_BROWSER_AD_PROXIMITY_PX', 24),
+    ],
+
+    // Optional off-site copy discovery using Tavily Search.
+    // Search snippets identify candidates; MaxGuard fetches candidates through
+    // SafeHttpClient and calculates its own shingle containment score.
+    'external_copy' => [
+        'enabled' => (bool) env('MAXGUARD_EXTERNAL_COPY_ENABLED', false),
+        'api_key' => env('TAVILY_API_KEY'),
+        'endpoint' => env('TAVILY_SEARCH_ENDPOINT', 'https://api.tavily.com/search'),
+        'max_pages_per_scan' => (int) env('MAXGUARD_EXTERNAL_COPY_MAX_PAGES_PER_SCAN', 30),
+        'queries_per_page' => (int) env('MAXGUARD_EXTERNAL_COPY_QUERIES_PER_PAGE', 2),
+        'candidates_per_query' => (int) env('MAXGUARD_EXTERNAL_COPY_CANDIDATES_PER_QUERY', 5),
+        'minimum_words' => (int) env('MAXGUARD_EXTERNAL_COPY_MIN_WORDS', 250),
+        'review_threshold' => (float) env('MAXGUARD_EXTERNAL_COPY_REVIEW_THRESHOLD', 0.35),
+        'high_threshold' => (float) env('MAXGUARD_EXTERNAL_COPY_HIGH_THRESHOLD', 0.65),
+        'timeout_seconds' => (int) env('MAXGUARD_EXTERNAL_COPY_TIMEOUT', 20),
+    ],
+
     'ga4' => [
         'client_id' => env('GOOGLE_CLIENT_ID'),
         'client_secret' => env('GOOGLE_CLIENT_SECRET'),

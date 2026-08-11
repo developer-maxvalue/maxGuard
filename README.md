@@ -345,9 +345,9 @@ Mỗi evidence item có SHA-256, kích thước, MIME type, thời điểm captu
 
 Backend này là một production-oriented MVP hoàn chỉnh, nhưng detector HTML không thể tự chứng minh pháp lý rằng nội dung “vi phạm bản quyền” hoặc traffic “invalid”. Những kết luận đó cần thêm:
 
-- search/index provider để tìm nguồn xuất bản sớm hơn;
+- API tìm kiếm đã được cấu hình và quota đủ để tìm candidate ngoài website; hệ thống vẫn không tự kết luận trang nào xuất bản trước;
 - image reverse-search/perceptual hash service;
-- Playwright renderer cho DOM sau JavaScript, mobile ad layout và CMP theo khu vực;
+- Playwright renderer hiện kiểm tra bố cục quảng cáo desktop/mobile nhưng chưa mô phỏng đầy đủ CMP theo từng khu vực địa lý;
 - Google Analytics/AdSense ingestion cho invalid-traffic analysis;
 - human review và tài liệu quyền sử dụng nội dung.
 
@@ -366,3 +366,5 @@ Test đi kèm kiểm tra auth/login/logout, recursive sitemap parsing, full URL 
 Assets Metronic trong `public/vendor/metronic` được trích từ template người dùng cung cấp và đã tinh gọn còn production bundles/fonts. Chủ dự án phải duy trì giấy phép Metronic hợp lệ; không phân phối công khai gói này như một template độc lập.
 
 Kiến trúc chi tiết và checklist deploy nằm trong [`docs/IMPLEMENTATION.md`](docs/IMPLEMENTATION.md). Nếu đang nâng cấp bản hiện tại, làm theo [`docs/UPGRADE-1.2.0.md`](docs/UPGRADE-1.2.0.md).
+
+Hai lớp kiểm tra tùy chọn mới—render vị trí quảng cáo bằng Playwright/Chromium và tìm nội dung tương đồng ngoài website qua Tavily Search—được hướng dẫn tại [`docs/UPGRADE-1.3.0.md`](docs/UPGRADE-1.3.0.md).

@@ -248,6 +248,12 @@ final class ScanRunner
             ->pluck('page_id')->filter()->map(fn ($id): int => (int) $id)->values()->all();
         $aiPageIds = $successfulTargets->where('ai_analyzed', true)
             ->pluck('page_id')->filter()->map(fn ($id): int => (int) $id)->values()->all();
+        $browserPageIds = $successfulTargets->where('status', ScanTarget::STATUS_COMPLETED)
+            ->filter(fn (ScanTarget $target): bool => (bool) data_get($target->page?->meta, 'maxguard_analysis.browser_audited', false))
+            ->pluck('page_id')->filter()->map(fn ($id): int => (int) $id)->values()->all();
+        $externalCopyPageIds = $successfulTargets->where('status', ScanTarget::STATUS_COMPLETED)
+            ->filter(fn (ScanTarget $target): bool => (bool) data_get($target->page?->meta, 'maxguard_analysis.external_copy_checked', false))
+            ->pluck('page_id')->filter()->map(fn ($id): int => (int) $id)->values()->all();
         $seen = $scan->findings()->pluck('fingerprint')->all();
         $this->resolveMissingFindings(
             $scan,
@@ -256,6 +262,8 @@ final class ScanRunner
             $seen,
             $analyzedPageIds,
             $aiPageIds,
+            $browserPageIds,
+            $externalCopyPageIds,
         );
         if (in_array($scan->type, ['full', 'copyright'], true)) {
             $this->resolveStaleDuplicateFindings(
@@ -285,6 +293,8 @@ final class ScanRunner
         $seen = [];
         $scannedPageIds = [];
         $aiScannedPageIds = [];
+        $browserScannedPageIds = [];
+        $externalCopyScannedPageIds = [];
         $scanned = 0;
         $skippedUnchanged = 0;
         $aiAnalyzed = 0;
@@ -292,6 +302,8 @@ final class ScanRunner
         $aiErrors = 0;
         $aiInputTokens = 0;
         $aiOutputTokens = 0;
+        $browserAnalyzed = 0;
+        $externalCopyAnalyzed = 0;
         $scanFindingIds = [];
 
         $scan->update([
@@ -350,6 +362,25 @@ final class ScanRunner
                     $this->detectors->analyze($document, $scan->type),
                     app(SightengineTextAnalyzer::class)->analyze($document),
                 );
+                $browserAuditedThisPage = false;
+                if ($this->shouldRunAddon($scan, 'browser_audit', $browserAnalyzed, ['full', 'ads', 'priority'])) {
+                    $browserAuditor = app(BrowserAdAuditor::class);
+                    $browserResults = $browserAuditor->analyze($document);
+                    $results = array_merge($results, $this->detectors->filter($browserResults, $scan->type));
+                    $browserAuditedThisPage = ! isset($browserAuditor->lastTrace()['error']);
+                    $browserAnalyzed++;
+                }
+                $externalCopyReady = app(ExternalCopyAnalyzer::class)->isConfigured();
+                $externalCopyCheckedThisPage = $externalCopyReady
+                    && $document->wordCount < max(50, (int) config('maxguard.external_copy.minimum_words', 250));
+                if ($document->wordCount >= max(50, (int) config('maxguard.external_copy.minimum_words', 250))
+                    && $this->shouldRunAddon($scan, 'external_copy', $externalCopyAnalyzed, ['full', 'copyright', 'priority'])) {
+                    $externalCopyAnalyzer = app(ExternalCopyAnalyzer::class);
+                    $copyResults = $externalCopyAnalyzer->analyze($document);
+                    $results = array_merge($results, $this->detectors->filter($copyResults, $scan->type));
+                    $externalCopyCheckedThisPage = ! isset($externalCopyAnalyzer->lastTrace()['error']);
+                    $externalCopyAnalyzed++;
+                }
                 $aiAnalyzedThisPage = false;
 
                 if ($this->shouldRunAi($scan, $aiAnalyzed)) {
@@ -376,7 +407,13 @@ final class ScanRunner
                     $scanFindingIds[$finding->id] = true;
                 }
 
-                $this->markPageAnalyzed($page, $scan, $aiAnalyzedThisPage);
+                $this->markPageAnalyzed($page, $scan, $aiAnalyzedThisPage, $browserAuditedThisPage, $externalCopyCheckedThisPage);
+                if ($browserAuditedThisPage) {
+                    $browserScannedPageIds[] = $page->id;
+                }
+                if ($externalCopyCheckedThisPage) {
+                    $externalCopyScannedPageIds[] = $page->id;
+                }
 
                 $scanned++;
                 $this->updateProgress(
@@ -397,7 +434,16 @@ final class ScanRunner
                 throw new RuntimeException('No crawlable HTML pages were retrieved. Check DNS, robots.txt and website availability.');
             }
 
-            $this->resolveMissingFindings($scan, $website, $startedAt, $seen, $scannedPageIds, $aiScannedPageIds);
+            $this->resolveMissingFindings(
+                $scan,
+                $website,
+                $startedAt,
+                $seen,
+                $scannedPageIds,
+                $aiScannedPageIds,
+                $browserScannedPageIds,
+                $externalCopyScannedPageIds,
+            );
             $this->complete($scan, $website, $scanned, $plan);
             $this->generateSiteAssessment($scan->fresh());
         } catch (Throwable $exception) {
@@ -465,6 +511,44 @@ final class ScanRunner
             'rules' => array_values(array_map(fn (DetectorResult $result): string => $result->ruleKey, $localResults)),
         ]);
 
+        $browserAudited = false;
+        $browser = app(BrowserAdAuditor::class);
+        $browserStarted = $telemetry->start($target, 'browser_audit', 'Playwright Chromium', 'Rendering desktop and mobile layouts to inspect real ad placement.');
+        $browserResults = [];
+        if ($this->reserveParallelAddon($scan->id, 'browser_audit', ['full', 'ads', 'priority'])) {
+            $browserResults = $this->detectors->filter($browser->analyze($document), $scan->type);
+            $browserAudited = ! isset($browser->lastTrace()['error']);
+        }
+        $browserTrace = $browser->lastTrace();
+        $telemetry->finish(
+            $target,
+            'browser_audit',
+            $browserStarted,
+            isset($browserTrace['error']) ? 'failed' : (($browserTrace['attempted'] ?? false) ? 'success' : 'skipped'),
+            (string) ($browserTrace['error'] ?? (($browserTrace['attempted'] ?? false) ? count($browserResults).' browser findings.' : 'Browser audit is disabled or has reached its page limit.')),
+            $browserTrace + ['findings_count' => count($browserResults)],
+        );
+
+        $externalCopy = app(ExternalCopyAnalyzer::class);
+        $externalCopyChecked = $externalCopy->isConfigured()
+            && $document->wordCount < max(50, (int) config('maxguard.external_copy.minimum_words', 250));
+        $copyStarted = $telemetry->start($target, 'external_copy', 'Tavily Search', 'Searching for and comparing similar content on other websites.');
+        $copyResults = [];
+        if ($document->wordCount >= max(50, (int) config('maxguard.external_copy.minimum_words', 250))
+            && $this->reserveParallelAddon($scan->id, 'external_copy', ['full', 'copyright', 'priority'])) {
+            $copyResults = $this->detectors->filter($externalCopy->analyze($document), $scan->type);
+            $externalCopyChecked = ! isset($externalCopy->lastTrace()['error']);
+        }
+        $copyTrace = $externalCopy->lastTrace();
+        $telemetry->finish(
+            $target,
+            'external_copy',
+            $copyStarted,
+            isset($copyTrace['error']) ? 'failed' : (($copyTrace['attempted'] ?? false) ? 'success' : 'skipped'),
+            (string) ($copyTrace['error'] ?? (($copyTrace['attempted'] ?? false) ? count($copyResults).' external-copy findings.' : 'External-copy checking is unavailable, skipped, or at its page limit.')),
+            $copyTrace + ['findings_count' => count($copyResults)],
+        );
+
         $sightengine = app(SightengineTextAnalyzer::class);
         $thirdPartyStarted = $telemetry->start($target, 'sightengine', 'Sightengine', 'Đang gửi văn bản trang đến dịch vụ kiểm duyệt bên thứ ba.');
         $thirdPartyResults = $sightengine->analyze($document);
@@ -483,7 +567,7 @@ final class ScanRunner
                 : ((string) ($thirdPartyTrace['skipped_reason'] ?? count($thirdPartyResults).' phát hiện kiểm duyệt.')),
             $thirdPartyTrace + ['findings_count' => count($thirdPartyResults)],
         );
-        $results = array_merge($localResults, $thirdPartyResults);
+        $results = array_merge($localResults, $browserResults, $copyResults, $thirdPartyResults);
         $aiAttempted = false;
         $aiAnalyzed = false;
         $aiFindings = 0;
@@ -536,7 +620,7 @@ final class ScanRunner
             $this->persistFinding($scan, $website, $page, $document, $result);
         }
 
-        $this->markPageAnalyzed($page, $scan, $aiAnalyzed);
+        $this->markPageAnalyzed($page, $scan, $aiAnalyzed, $browserAudited, $externalCopyChecked);
         $target->update([
             'page_id' => $page->id,
             'status' => ScanTarget::STATUS_COMPLETED,
@@ -553,6 +637,8 @@ final class ScanRunner
                 'sightengine_attempted' => (bool) ($thirdPartyTrace['attempted'] ?? false),
                 'sightengine_http_status' => $thirdPartyTrace['http_status'] ?? null,
                 'sightengine_request_id' => $thirdPartyTrace['request_id'] ?? null,
+                'browser_audit' => $browserTrace,
+                'external_copy' => $copyTrace,
             ],
             'finished_at' => now(),
             'current_stage' => 'finished',
@@ -583,6 +669,36 @@ final class ScanRunner
                 $updates['meta'] = array_merge((array) $scan->meta, ['ai_limit_reached' => true]);
             }
             $scan->update($updates);
+
+            return true;
+        });
+    }
+
+    /** @param list<string> $scanTypes */
+    private function reserveParallelAddon(int $scanId, string $name, array $scanTypes): bool
+    {
+        $service = $name === 'browser_audit' ? app(BrowserAdAuditor::class) : app(ExternalCopyAnalyzer::class);
+        if (! $service->isConfigured()) {
+            return false;
+        }
+
+        return DB::transaction(function () use ($scanId, $name, $scanTypes): bool {
+            $scan = Scan::query()->lockForUpdate()->findOrFail($scanId);
+            if (! in_array($scan->type, $scanTypes, true) || in_array($scan->status, [Scan::STATUS_CANCELLED, Scan::STATUS_FAILED], true)) {
+                return false;
+            }
+            $meta = (array) $scan->meta;
+            $counter = $name.'_pages_analyzed';
+            $reserved = (int) ($meta[$counter] ?? 0);
+            $limit = max(0, (int) config("maxguard.{$name}.max_pages_per_scan", 0));
+            if ($limit > 0 && $reserved >= $limit) {
+                return false;
+            }
+            $meta[$counter] = $reserved + 1;
+            if ($limit > 0 && $reserved + 1 >= $limit) {
+                $meta[$name.'_limit_reached'] = true;
+            }
+            $scan->update(['meta' => $meta]);
 
             return true;
         });
@@ -803,6 +919,18 @@ final class ScanRunner
         return $limit === 0 || $analyzed < $limit;
     }
 
+    /** @param list<string> $scanTypes */
+    private function shouldRunAddon(Scan $scan, string $name, int $analyzed, array $scanTypes): bool
+    {
+        $service = $name === 'browser_audit' ? app(BrowserAdAuditor::class) : app(ExternalCopyAnalyzer::class);
+        if (! $service->isConfigured() || ! in_array($scan->type, $scanTypes, true)) {
+            return false;
+        }
+        $limit = max(0, (int) config("maxguard.{$name}.max_pages_per_scan", 0));
+
+        return $limit === 0 || $analyzed < $limit;
+    }
+
     private function existingPage(Website $website, PageDocument $document): ?Page
     {
         return Page::query()
@@ -824,9 +952,20 @@ final class ScanRunner
         if (! $this->scanScopeCovers((string) ($marker['scan_type'] ?? ''), $scan->type)) {
             return false;
         }
-        if ($scan->use_ai) {
-            return ($marker['ai_analyzed'] ?? false) === true
-                && ($marker['ai_model'] ?? null) === (string) config('maxguard.ai.model');
+        if ($scan->use_ai
+            && (($marker['ai_analyzed'] ?? false) !== true
+                || ($marker['ai_model'] ?? null) !== (string) config('maxguard.ai.model'))) {
+            return false;
+        }
+        if (app(BrowserAdAuditor::class)->isConfigured()
+            && in_array($scan->type, ['full', 'ads', 'priority'], true)
+            && ($marker['browser_audited'] ?? false) !== true) {
+            return false;
+        }
+        if (app(ExternalCopyAnalyzer::class)->isConfigured()
+            && in_array($scan->type, ['full', 'copyright', 'priority'], true)
+            && ($marker['external_copy_checked'] ?? false) !== true) {
+            return false;
         }
 
         return true;
@@ -876,14 +1015,23 @@ final class ScanRunner
         ]);
     }
 
-    private function markPageAnalyzed(Page $page, Scan $scan, bool $aiAnalyzed): void
-    {
+    private function markPageAnalyzed(
+        Page $page,
+        Scan $scan,
+        bool $aiAnalyzed,
+        bool $browserAudited = false,
+        bool $externalCopyChecked = false,
+    ): void {
         $meta = (array) $page->meta;
         $meta['maxguard_analysis'] = [
             'ruleset_version' => $scan->ruleset_version,
             'scan_type' => $scan->type,
             'ai_analyzed' => $aiAnalyzed,
             'ai_model' => $aiAnalyzed ? (string) config('maxguard.ai.model') : null,
+            'browser_audited' => $browserAudited,
+            'browser_audit_version' => $browserAudited ? 1 : null,
+            'external_copy_checked' => $externalCopyChecked,
+            'external_copy_version' => $externalCopyChecked ? 1 : null,
             'analyzed_at' => now()->toIso8601String(),
         ];
         $page->update(['meta' => $meta]);
@@ -977,7 +1125,13 @@ final class ScanRunner
         return $finding;
     }
 
-    /** @param list<string> $seen @param list<int> $scannedPageIds @param list<int> $aiScannedPageIds */
+    /**
+     * @param  list<string>  $seen
+     * @param  list<int>  $scannedPageIds
+     * @param  list<int>  $aiScannedPageIds
+     * @param  list<int>  $browserScannedPageIds
+     * @param  list<int>  $externalCopyScannedPageIds
+     */
     private function resolveMissingFindings(
         Scan $scan,
         Website $website,
@@ -985,6 +1139,8 @@ final class ScanRunner
         array $seen,
         array $scannedPageIds,
         array $aiScannedPageIds,
+        array $browserScannedPageIds = [],
+        array $externalCopyScannedPageIds = [],
     ): void {
         $categories = match ($scan->type) {
             'copyright' => ['Copyright', 'Duplicate content'],
@@ -1004,7 +1160,7 @@ final class ScanRunner
             $seen,
             $scannedPageIds,
             $categories,
-            false,
+            'local',
         );
 
         if ($scan->use_ai && $aiScannedPageIds !== []) {
@@ -1014,9 +1170,11 @@ final class ScanRunner
                 $seen,
                 $aiScannedPageIds,
                 $categories,
-                true,
+                'ai',
             );
         }
+        $this->resolveFindingsQuery($website, $startedAt, $seen, $browserScannedPageIds, $categories, 'browser');
+        $this->resolveFindingsQuery($website, $startedAt, $seen, $externalCopyScannedPageIds, $categories, 'external_copy');
     }
 
     /** @param list<string> $seen @param list<int> $pageIds @param list<string>|null $categories */
@@ -1026,7 +1184,7 @@ final class ScanRunner
         array $seen,
         array $pageIds,
         ?array $categories,
-        bool $aiOnly,
+        string $scope,
     ): void {
         if ($pageIds === []) {
             return;
@@ -1035,8 +1193,16 @@ final class ScanRunner
         $query = $website->findings()
             ->open()
             ->whereIn('page_id', array_values(array_unique($pageIds)))
-            ->where('last_seen_at', '<', $startedAt)
-            ->where('rule_key', $aiOnly ? 'like' : 'not like', 'ai.%');
+            ->where('last_seen_at', '<', $startedAt);
+        match ($scope) {
+            'ai' => $query->where('rule_key', 'like', 'ai.%'),
+            'browser' => $query->where('rule_key', 'like', 'ads.browser-%'),
+            'external_copy' => $query->where('rule_key', 'copyright.external-content-match'),
+            default => $query
+                ->where('rule_key', 'not like', 'ai.%')
+                ->where('rule_key', 'not like', 'ads.browser-%')
+                ->where('rule_key', '!=', 'copyright.external-content-match'),
+        };
         if ($seen !== []) {
             $query->whereNotIn('fingerprint', array_values(array_unique($seen)));
         }

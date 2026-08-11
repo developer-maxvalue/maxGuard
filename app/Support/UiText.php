@@ -30,6 +30,8 @@ final class UiText
         'crawl' => 'Thu thập dữ liệu',
         'reuse' => 'Tái sử dụng kết quả',
         'local_rules' => 'Quy tắc cục bộ',
+        'browser_audit' => 'Kiểm tra quảng cáo bằng trình duyệt',
+        'external_copy' => 'Đối chiếu nội dung ngoài website',
         'sightengine' => 'Sightengine',
         'gemini' => 'Gemini',
         'pipeline' => 'Quy trình xử lý',
