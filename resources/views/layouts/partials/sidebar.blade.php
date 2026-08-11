@@ -60,9 +60,6 @@
                 <i class="bi bi-stars"></i><span>Cài đặt AI</span>
             </a>
         @endif
-        <a class="mg-nav-link" href="{{ route('findings.index') }}">
-            <i class="bi bi-file-earmark-check"></i><span>Bằng chứng</span>
-        </a>
         <a class="mg-nav-link" href="{{ route('findings.export.xlsx') }}">
             <i class="bi bi-file-earmark-excel"></i><span>Báo cáo Excel</span>
         </a>
