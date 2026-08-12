@@ -117,8 +117,11 @@ final class WebsiteCrawler
 
                 $page = $this->inspector->inspect($response);
                 $page->meta['crawl_source_url'] = $url;
-                $page->meta['essential_page_type'] = $plan->requiredTypeFor($url)
+                $essentialPageType = $plan->requiredTypeFor($url)
                     ?? EssentialPublisherPages::classify($response->url);
+                if ($essentialPageType !== null) {
+                    $page->meta['essential_page_type'] = $essentialPageType;
+                }
                 if ($page->isHomePage()) {
                     $page->meta = array_merge($page->meta, $siteSignals);
                 }

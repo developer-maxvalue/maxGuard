@@ -67,15 +67,23 @@ final class SiteController extends Controller
     public function show(Website $site, AiConfiguration $aiConfiguration, CopyrightEvidenceExtractor $copyrightEvidence): View
     {
         $this->authorizeOwner($site);
-        $site->load([
-            'ga4Connection',
-            'findings' => fn ($query) => $query->open()->with('page.copyrightReviews'),
-        ]);
+        $site->load('ga4Connection');
         $latestScan = $site->scans()
             ->whereIn('status', [Scan::STATUS_COMPLETED, Scan::STATUS_PARTIAL])
             ->latest('finished_at')
             ->first();
-        $grouped = $site->findings->groupBy('category');
+        $findingSummary = $site->findings()
+            ->open()
+            ->selectRaw('category, severity, count(*) as aggregate')
+            ->groupBy('category', 'severity')
+            ->get();
+        $topFindings = $site->findings()
+            ->open()
+            ->with('page.copyrightReviews')
+            ->orderByRaw("case severity when 'critical' then 1 when 'high' then 2 when 'review' then 3 else 4 end")
+            ->orderByDesc('confidence')
+            ->limit(10)
+            ->get();
         $policyDefinitions = [
             'Nội dung cấm và lừa đảo' => ['Prohibited content', 'Deceptive practices'],
             'Bản quyền và trùng lặp' => ['Copyright', 'Duplicate content'],
@@ -86,27 +94,24 @@ final class SiteController extends Controller
 
         $policies = [];
         foreach ($policyDefinitions as $name => $categories) {
-            // Eloquent\Collection::only() expects model primary keys. After
-            // groupBy(), each item is itself a Collection, so calling only()
-            // makes Eloquent call getKey() on a Collection and crashes.
-            $findings = $site->findings->whereIn('category', $categories);
-            $penalty = $findings->sum(fn (Finding $finding): int => match ($finding->severity) {
+            $findings = $findingSummary->whereIn('category', $categories);
+            $penalty = $findings->sum(fn ($finding): int => (int) $finding->aggregate * match ($finding->severity) {
                 'critical' => 30, 'high' => 18, 'review' => 8, default => 2,
             });
+            $findingCount = (int) $findings->sum('aggregate');
             $score = max(0, 100 - min(90, $penalty));
             $policies[] = [
                 'name' => $name,
                 'score' => $score,
-                'count' => $findings->count().' phát hiện',
+                'count' => $findingCount.' phát hiện',
                 'status' => Website::statusFromScore($score),
             ];
         }
 
-        $riskUrls = $site->findings
+        $riskUrls = $topFindings
             ->sortBy(fn (Finding $finding): int => match ($finding->severity) {
                 'critical' => 1, 'high' => 2, 'review' => 3, default => 4
             })
-            ->take(10)
             ->map(fn (Finding $finding): array => [
                 'finding_id' => $finding->public_id,
                 'path' => $finding->page ? (parse_url($finding->page->url, PHP_URL_PATH) ?: '/') : '/',
@@ -114,11 +119,10 @@ final class SiteController extends Controller
                 'severity' => $finding->severity,
             ])->values()->all();
 
-        $aiEvidenceExamples = $site->findings
+        $aiEvidenceExamples = $topFindings
             ->sortBy(fn (Finding $finding): int => match ($finding->severity) {
                 'critical' => 1, 'high' => 2, 'review' => 3, default => 4
             })
-            ->take(10)
             ->map(function (Finding $finding) use ($site, $copyrightEvidence): array {
                 $signals = (array) ($finding->signals ?? []);
 

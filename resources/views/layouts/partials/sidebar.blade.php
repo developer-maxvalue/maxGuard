@@ -23,10 +23,10 @@
         \App\Models\Page::query()
             ->whereIn('website_id', $sidebarSiteIds)
             ->whereNotNull('last_scanned_at')
-            ->get(['website_id', 'url', 'meta'])
+            ->whereIn('meta->essential_page_type', $sidebarRequiredTypes)
+            ->get(['website_id', 'meta'])
             ->each(function ($page) use (&$sidebarRequiredBySite): void {
-                $type = data_get($page->meta, 'essential_page_type')
-                    ?: \App\Support\EssentialPublisherPages::classify($page->url);
+                $type = data_get($page->meta, 'essential_page_type');
                 if ($type !== null) {
                     $sidebarRequiredBySite[$page->website_id][$type] = true;
                 }
