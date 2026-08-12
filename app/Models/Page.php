@@ -23,6 +23,7 @@ final class Page extends Model
         'content_hash',
         'word_count',
         'ad_count',
+        'essential_page_type',
         'ga4_views_7d',
         'ga4_synced_at',
         'last_scanned_at',

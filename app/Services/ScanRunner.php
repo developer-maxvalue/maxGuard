@@ -1015,6 +1015,7 @@ final class ScanRunner
             'content_hash' => $document->contentHash(),
             'word_count' => $document->wordCount,
             'ad_count' => $document->adCount,
+            'essential_page_type' => $document->meta['essential_page_type'] ?? null,
             'last_scanned_at' => now(),
             'meta' => $meta,
         ]);

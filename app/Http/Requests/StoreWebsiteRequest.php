@@ -31,8 +31,17 @@ final class StoreWebsiteRequest extends FormRequest
             try {
                 app(SafeUrlValidator::class)->publicIps((string) $this->input('start_url'));
                 $domain = strtolower((string) parse_url((string) $this->input('start_url'), PHP_URL_HOST));
-                if ($domain !== '' && Website::query()->where('domain', $domain)->exists()) {
-                    $validator->errors()->add('start_url', 'Tên miền này đã được đăng ký.');
+                $ownerId = auth()->id();
+                $duplicate = Website::query()
+                    ->where('domain', $domain)
+                    ->when(
+                        $ownerId === null,
+                        fn ($query) => $query->whereNull('user_id'),
+                        fn ($query) => $query->where('user_id', $ownerId),
+                    )
+                    ->exists();
+                if ($domain !== '' && $duplicate) {
+                    $validator->errors()->add('start_url', 'Tên miền này đã có trong tài khoản của bạn.');
                 }
             } catch (\Throwable $exception) {
                 $validator->errors()->add('start_url', $exception->getMessage());

@@ -15,24 +15,15 @@
             : ($sidebarTotal > 0
                 ? (int) round(($sidebarMonitored / $sidebarTotal) * 100)
                 : 0);
-    $sidebarSiteIds = (clone $sidebarSites)->pluck('id');
     $sidebarRequiredTypes = \App\Support\EssentialPublisherPages::types();
-    $sidebarRequiredTotal = $sidebarSiteIds->count() * count($sidebarRequiredTypes);
-    $sidebarRequiredBySite = [];
-    if ($sidebarSiteIds->isNotEmpty()) {
-        \App\Models\Page::query()
-            ->whereIn('website_id', $sidebarSiteIds)
-            ->whereNotNull('last_scanned_at')
-            ->whereIn('meta->essential_page_type', $sidebarRequiredTypes)
-            ->get(['website_id', 'meta'])
-            ->each(function ($page) use (&$sidebarRequiredBySite): void {
-                $type = data_get($page->meta, 'essential_page_type');
-                if ($type !== null) {
-                    $sidebarRequiredBySite[$page->website_id][$type] = true;
-                }
-            });
-    }
-    $sidebarRequiredChecked = collect($sidebarRequiredBySite)->sum(fn($types) => count($types));
+    $sidebarRequiredTotal = $sidebarTotal * count($sidebarRequiredTypes);
+    $sidebarRequiredChecked = \App\Models\Page::query()
+        ->whereHas('website', fn($query) => $query->accessibleBy(auth()->id()))
+        ->whereNotNull('last_scanned_at')
+        ->whereIn('essential_page_type', $sidebarRequiredTypes)
+        ->distinct()
+        ->get(['website_id', 'essential_page_type'])
+        ->count();
     $sidebarRequiredMissing = max(0, $sidebarRequiredTotal - $sidebarRequiredChecked);
     $sidebarRequiredIssues = \App\Models\Finding::query()
         ->whereHas('website', fn($query) => $query->accessibleBy(auth()->id()))
