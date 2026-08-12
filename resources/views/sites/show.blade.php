@@ -236,10 +236,10 @@
     </div>
 
     <div class="card mg-card mb-5">
-        <div class="card-header border-0 pt-2"><div class="card-title d-block">
-            <h2 class="mg-card-title">Lưu lượng GA4 · 7 ngày gần nhất</h2>
-            <p class="mg-card-subtitle">Lượt quét ưu tiên theo thứ tự lưu lượng từ cao xuống thấp.</p>
-        </div></div>
+{{--        <div class="card-header border-0 pt-2"><div class="card-title d-block">--}}
+{{--            <h2 class="mg-card-title">Lưu lượng GA4 · 7 ngày gần nhất</h2>--}}
+{{--            <p class="mg-card-subtitle">Lượt quét ưu tiên theo thứ tự lưu lượng từ cao xuống thấp.</p>--}}
+{{--        </div></div>--}}
         <div class="card-body pt-0">
             @if (!$ga4)
                 <a class="btn btn-light-primary" href="{{ route('ga4.connect', $site['slug']) }}"><i class="bi bi-google me-2"></i>Kết nối Google Analytics</a>
