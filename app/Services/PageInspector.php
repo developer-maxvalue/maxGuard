@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Data\CrawlResponse;
 use App\Data\PageDocument;
+use App\Support\EssentialPublisherPages;
 use DOMDocument;
 use DOMElement;
 use DOMXPath;
@@ -26,9 +27,15 @@ final class PageInspector
         $h1Count = $xpath->query('//h1')->length;
 
         $links = [];
+        $linksWithText = [];
         foreach ($xpath->query('//a[@href]') as $node) {
             if ($node instanceof DOMElement) {
-                $links[] = $node->getAttribute('href');
+                $href = $node->getAttribute('href');
+                $links[] = $href;
+                $linksWithText[] = [
+                    'href' => $href,
+                    'text' => trim(preg_replace('/\s+/u', ' ', $node->textContent) ?? ''),
+                ];
             }
         }
 
@@ -56,7 +63,13 @@ final class PageInspector
         $text = trim(preg_replace('/\s+/u', ' ', (string) $bodyText) ?? '');
         preg_match_all('/[\p{L}\p{N}]+(?:[\'’_-][\p{L}\p{N}]+)*/u', $text, $words);
 
-        $lowerLinks = mb_strtolower(implode(' ', $links));
+        $linkedTypes = [];
+        foreach ($linksWithText as $link) {
+            $type = EssentialPublisherPages::classify($link['href'], $link['text']);
+            if ($type !== null) {
+                $linkedTypes[$type] = true;
+            }
+        }
         $externalImages = 0;
         $externalImageUrls = [];
         $missingAlt = 0;
@@ -87,14 +100,15 @@ final class PageInspector
             images: $images,
             meta: [
                 'paragraph_count' => $xpath->query('//p')->length,
-                'has_privacy_link' => str_contains($lowerLinks, 'privacy') || str_contains($lowerLinks, 'cookie'),
-                'has_about_link' => str_contains($lowerLinks, 'about'),
-                'has_contact_link' => str_contains($lowerLinks, 'contact'),
+                'has_privacy_link' => isset($linkedTypes['privacy']),
+                'has_about_link' => isset($linkedTypes['about']),
+                'has_contact_link' => isset($linkedTypes['contact']),
                 'has_consent_signal' => $hasConsentSignal,
                 'external_images' => $externalImages,
                 'external_image_urls' => array_values(array_unique($externalImageUrls)),
                 'images_missing_alt' => $missingAlt,
                 'body_class' => is_string($bodyClass) ? trim($bodyClass) : '',
+                'links_with_text' => $linksWithText,
             ],
         );
     }

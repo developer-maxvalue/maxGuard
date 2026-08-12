@@ -6,6 +6,7 @@ use App\Detectors\ContentQualityDetector;
 use App\Detectors\CopyrightSignalsDetector;
 use App\Detectors\DuplicateContentDetector;
 use App\Detectors\PrivacyDetector;
+use App\Detectors\PublisherPolicyPagesDetector;
 use App\Detectors\TechnicalTrustDetector;
 
 return [
@@ -121,6 +122,7 @@ return [
         AdExperienceDetector::class,
         AdsTxtDetector::class,
         PrivacyDetector::class,
+        PublisherPolicyPagesDetector::class,
         TechnicalTrustDetector::class,
     ],
 

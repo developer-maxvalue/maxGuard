@@ -15,6 +15,33 @@
             : ($sidebarTotal > 0
                 ? (int) round(($sidebarMonitored / $sidebarTotal) * 100)
                 : 0);
+    $sidebarSiteIds = (clone $sidebarSites)->pluck('id');
+    $sidebarRequiredTypes = \App\Support\EssentialPublisherPages::types();
+    $sidebarRequiredTotal = $sidebarSiteIds->count() * count($sidebarRequiredTypes);
+    $sidebarRequiredBySite = [];
+    if ($sidebarSiteIds->isNotEmpty()) {
+        \App\Models\Page::query()
+            ->whereIn('website_id', $sidebarSiteIds)
+            ->whereNotNull('last_scanned_at')
+            ->get(['website_id', 'url', 'meta'])
+            ->each(function ($page) use (&$sidebarRequiredBySite): void {
+                $type = data_get($page->meta, 'essential_page_type')
+                    ?: \App\Support\EssentialPublisherPages::classify($page->url);
+                if ($type !== null) {
+                    $sidebarRequiredBySite[$page->website_id][$type] = true;
+                }
+            });
+    }
+    $sidebarRequiredChecked = collect($sidebarRequiredBySite)->sum(fn($types) => count($types));
+    $sidebarRequiredMissing = max(0, $sidebarRequiredTotal - $sidebarRequiredChecked);
+    $sidebarRequiredIssues = \App\Models\Finding::query()
+        ->whereHas('website', fn($query) => $query->accessibleBy(auth()->id()))
+        ->open()
+        ->where('rule_key', 'like', 'publisher.%')
+        ->count();
+    $sidebarRequiredCoverage = $sidebarRequiredTotal > 0
+        ? min(100, (int) round(($sidebarRequiredChecked / $sidebarRequiredTotal) * 100))
+        : 0;
 @endphp
 
 <aside class="mg-sidebar" id="mg-sidebar" aria-label="Điều hướng chính">
@@ -76,6 +103,28 @@
             <div class="progress-bar bg-info" role="progressbar" style="width: {{ $sidebarCoverage }}%"
                 aria-valuenow="{{ $sidebarCoverage }}" aria-valuemin="0" aria-valuemax="100"></div>
         </div>
-        <div class="fs-8 text-info mt-3">Phạm vi toàn hệ thống {{ $sidebarCoverage }}%</div>
+        <div class="fs-8 text-info mt-3">Phạm vi URL đã quét {{ $sidebarCoverage }}%</div>
+        <div class="border-top border-white border-opacity-10 mt-4 pt-4">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+                <span class="fs-7 fw-semibold text-white">Trang bắt buộc</span>
+                <span class="fs-8 {{ $sidebarRequiredIssues > 0 || $sidebarRequiredMissing > 0 ? 'text-warning' : 'text-success' }}">
+                    {{ $sidebarRequiredChecked }}/{{ $sidebarRequiredTotal }}
+                </span>
+            </div>
+            <div class="progress h-6px bg-white bg-opacity-10">
+                <div class="progress-bar {{ $sidebarRequiredIssues > 0 || $sidebarRequiredMissing > 0 ? 'bg-warning' : 'bg-success' }}"
+                    role="progressbar" style="width: {{ $sidebarRequiredCoverage }}%"
+                    aria-valuenow="{{ $sidebarRequiredCoverage }}" aria-valuemin="0" aria-valuemax="100"></div>
+            </div>
+            <div class="fs-8 text-white-50 mt-3">
+                @if ($sidebarRequiredTotal === 0)
+                    Chưa có website để kiểm tra
+                @elseif ($sidebarRequiredMissing > 0 || $sidebarRequiredIssues > 0)
+                    Thiếu {{ $sidebarRequiredMissing }} · {{ $sidebarRequiredIssues }} vấn đề nội dung
+                @else
+                    Đã quét và không phát hiện thiếu sót
+                @endif
+            </div>
+        </div>
     </div>
 </aside>

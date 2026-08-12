@@ -19,7 +19,7 @@ final class PageInspectorTest extends TestCase
         </body></html>
         HTML;
 
-        $page = (new PageInspector())->inspect(new CrawlResponse('https://example.com/', 200, $html));
+        $page = (new PageInspector)->inspect(new CrawlResponse('https://example.com/', 200, $html));
 
         $this->assertSame('Example article', $page->title);
         $this->assertSame(1, $page->h1Count);
@@ -27,5 +27,22 @@ final class PageInspectorTest extends TestCase
         $this->assertTrue($page->meta['has_privacy_link']);
         $this->assertSame(1, $page->meta['external_images']);
         $this->assertSame(['https://cdn.example.net/photo.jpg'], $page->meta['external_image_urls']);
+    }
+
+    public function test_it_recognizes_vietnamese_publisher_page_links(): void
+    {
+        $html = <<<'HTML'
+        <html><body>
+        <a href="/gioi-thieu">Về chúng tôi</a>
+        <a href="/lien-he">Liên hệ</a>
+        <a href="/chinh-sach-bao-mat">Chính sách bảo mật</a>
+        </body></html>
+        HTML;
+
+        $page = (new PageInspector)->inspect(new CrawlResponse('https://example.com/', 200, $html));
+
+        $this->assertTrue($page->meta['has_about_link']);
+        $this->assertTrue($page->meta['has_contact_link']);
+        $this->assertTrue($page->meta['has_privacy_link']);
     }
 }

@@ -35,15 +35,15 @@ final class WebsiteCrawlerTest extends TestCase
             XML),
             'https://example.com/ads.txt' => new CrawlResponse('https://example.com/ads.txt', 404, ''),
             'https://example.com/' => $this->html('https://example.com/', 'Home'),
-            'https://example.com/article-one' => $this->html('https://example.com/article-one', 'Article one'),
-            'https://example.com/article-two' => $this->html('https://example.com/article-two', 'Article two'),
+            'https://example.com/article-one/' => $this->html('https://example.com/article-one/', 'Article one'),
+            'https://example.com/article-two/' => $this->html('https://example.com/article-two/', 'Article two'),
         ];
 
         $crawler = new WebsiteCrawler(
             new FakeSafeHttpClient($responses),
-            new PageInspector(),
-            new UrlNormalizer(),
-            new SitemapParser(),
+            new PageInspector,
+            new UrlNormalizer,
+            new SitemapParser,
         );
         $website = new Website(['start_url' => 'https://example.com/']);
 
@@ -86,25 +86,65 @@ final class WebsiteCrawlerTest extends TestCase
 
         $crawler = new WebsiteCrawler(
             new FakeSafeHttpClient($responses),
-            new PageInspector(),
-            new UrlNormalizer(),
-            new SitemapParser(),
+            new PageInspector,
+            new UrlNormalizer,
+            new SitemapParser,
         );
 
         $plan = $crawler->discover(new Website(['start_url' => 'https://example.com/']), 2);
 
-        $this->assertSame(2, $plan->count());
+        $this->assertSame(4, $plan->count());
         $this->assertSame(2, $plan->configuredLimit);
         $this->assertSame([
-            'https://example.com/newest',
-            'https://example.com/middle',
+            'https://example.com/',
+            'https://example.com/privacy/',
+            'https://example.com/newest/',
+            'https://example.com/middle/',
         ], $plan->urls);
         $this->assertTrue($plan->sampled);
         $this->assertFalse($plan->truncated);
-        $this->assertSame(2, $plan->sitemapFiles);
+        $this->assertSame(3, $plan->sitemapFiles);
         $this->assertSame('latest_posts', $plan->selectionMode);
         $this->assertSame(3, $plan->availableUrls);
-        $this->assertSame(3, $plan->siteUrlsDiscovered);
+        $this->assertSame(4, $plan->siteUrlsDiscovered);
+        $this->assertSame(2, $plan->requiredCount());
+    }
+
+    public function test_required_publisher_pages_are_added_outside_the_article_limit(): void
+    {
+        config()->set('maxguard.crawler.requests_per_second', 100_000);
+        config()->set('maxguard.crawler.max_discovered_urls', 100);
+
+        $home = <<<'HTML'
+        <html><head><title>Home</title></head><body>
+        <a href="/gioi-thieu/">Về chúng tôi</a>
+        <a href="/lien-he/">Liên hệ</a>
+        <a href="/chinh-sach-bao-mat/">Chính sách bảo mật</a>
+        <a href="/dieu-khoan-su-dung/">Điều khoản</a>
+        <a href="/dmca/">DMCA</a>
+        <a href="/chinh-sach-bien-tap/">Chính sách biên tập</a>
+        <a href="/mien-tru-trach-nhiem/">Miễn trừ trách nhiệm</a>
+        </body></html>
+        HTML;
+        $responses = [
+            'https://example.com/robots.txt' => new CrawlResponse('https://example.com/robots.txt', 404, ''),
+            'https://example.com/' => new CrawlResponse('https://example.com/', 200, $home, ['Content-Type' => ['text/html']]),
+        ];
+
+        $crawler = new WebsiteCrawler(
+            new FakeSafeHttpClient($responses),
+            new PageInspector,
+            new UrlNormalizer,
+            new SitemapParser,
+        );
+
+        $plan = $crawler->discover(new Website(['start_url' => 'https://example.com/']), 1);
+
+        $this->assertSame(8, $plan->count());
+        $this->assertSame(8, $plan->requiredCount());
+        $this->assertContains('https://example.com/gioi-thieu/', $plan->urls);
+        $this->assertContains('https://example.com/chinh-sach-bao-mat/', $plan->urls);
+        $this->assertContains('https://example.com/chinh-sach-bien-tap/', $plan->urls);
     }
 
     private function html(string $url, string $title): CrawlResponse
@@ -118,9 +158,7 @@ final class WebsiteCrawlerTest extends TestCase
 final class FakeSafeHttpClient extends SafeHttpClient
 {
     /** @param array<string, CrawlResponse> $responses */
-    public function __construct(private array $responses)
-    {
-    }
+    public function __construct(private array $responses) {}
 
     public function get(string $url, string $accept = 'text/html,application/xhtml+xml'): CrawlResponse
     {

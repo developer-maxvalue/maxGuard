@@ -85,6 +85,7 @@
                     <option value="Prohibited content" @selected(request('category') === 'Prohibited content')>Nội dung bị cấm</option>
                     <option value="Deceptive practices" @selected(request('category') === 'Deceptive practices')>Hành vi lừa đảo</option>
                     <option value="Technical trust" @selected(request('category') === 'Technical trust')>Độ tin cậy kỹ thuật</option>
+                    <option value="Publisher requirements" @selected(request('category') === 'Publisher requirements')>Thông tin nhà xuất bản</option>
                 </select></div>
         </form>
         <div class="card-body pt-1">

@@ -10,18 +10,32 @@ final class CrawlPlan
     /** @var array<string, true> */
     private array $knownUrls = [];
 
+    /** @var array<string, string> normalized URL hash => essential page type */
+    private array $requiredPageTypes = [];
+
+    private int $regularUrlCount = 0;
+
     /** @var array<string, int> */
     public array $sourceCounts = [];
 
     public int $sitemapFiles = 0;
+
     public int $sitemapErrors = 0;
+
     public int $blockedByRobots = 0;
+
     public int $failedRequests = 0;
+
     public int $nonHtmlResponses = 0;
+
     public bool $truncated = false;
+
     public bool $sampled = false;
+
     public int $availableUrls = 0;
+
     public int $siteUrlsDiscovered = 0;
+
     public string $selectionMode = 'all_urls';
 
     /** @var array<string, string> normalized URL hash => crawl error */
@@ -30,8 +44,7 @@ final class CrawlPlan
     public function __construct(
         public int $limit,
         public int $configuredLimit,
-    ) {
-    }
+    ) {}
 
     public function addUrl(string $url, string $source): bool
     {
@@ -40,7 +53,7 @@ final class CrawlPlan
             return false;
         }
 
-        if (count($this->urls) >= $this->limit) {
+        if ($this->regularUrlCount >= $this->limit) {
             if (! $this->sampled) {
                 $this->truncated = true;
             }
@@ -50,9 +63,35 @@ final class CrawlPlan
 
         $this->knownUrls[$hash] = true;
         $this->urls[] = $url;
+        $this->regularUrlCount++;
         $this->sourceCounts[$source] = ($this->sourceCounts[$source] ?? 0) + 1;
 
         return true;
+    }
+
+    public function addRequiredUrl(string $url, string $source, string $type): bool
+    {
+        $hash = hash('sha256', $url);
+        $this->requiredPageTypes[$hash] = $type;
+        if (isset($this->knownUrls[$hash])) {
+            return false;
+        }
+
+        $this->knownUrls[$hash] = true;
+        $this->urls[] = $url;
+        $this->sourceCounts[$source] = ($this->sourceCounts[$source] ?? 0) + 1;
+
+        return true;
+    }
+
+    public function requiredTypeFor(string $url): ?string
+    {
+        return $this->requiredPageTypes[hash('sha256', $url)] ?? null;
+    }
+
+    public function requiredCount(): int
+    {
+        return count(array_unique($this->requiredPageTypes));
     }
 
     public function configureSelection(
@@ -120,6 +159,7 @@ final class CrawlPlan
             'available_urls' => $this->availableUrls,
             'site_urls_discovered' => $this->siteUrlsDiscovered,
             'sampled_urls' => $discovered,
+            'required_pages_discovered' => $this->requiredCount(),
             'site_coverage_percent' => $this->availableUrls > 0
                 ? round((min($scanned, $this->availableUrls) / $this->availableUrls) * 100, 2)
                 : 0,

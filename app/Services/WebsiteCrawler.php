@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Data\CrawlPlan;
 use App\Data\PageDocument;
 use App\Models\Website;
+use App\Support\EssentialPublisherPages;
 use Generator;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -18,8 +19,7 @@ final class WebsiteCrawler
         private PageInspector $inspector,
         private UrlNormalizer $urls,
         private SitemapParser $sitemaps,
-    ) {
-    }
+    ) {}
 
     public function discover(Website $website, ?int $scanLimit = null): CrawlPlan
     {
@@ -31,6 +31,8 @@ final class WebsiteCrawler
         $effectiveLimit = $configuredLimit > 0 ? min($configuredLimit, $safetyLimit) : $safetyLimit;
         $plan = new CrawlPlan($effectiveLimit, $configuredLimit);
         $startUrl = $this->urls->normalize($website->start_url);
+        $plan->addRequiredUrl($startUrl, 'required_page', 'home');
+        $this->discoverRequiredPublisherPages($startUrl, $plan);
 
         $robots = $this->robots($startUrl);
         $seeds = [];
@@ -59,7 +61,7 @@ final class WebsiteCrawler
     {
         $plan ??= $this->discover($website);
         $startUrl = $this->urls->normalize($website->start_url);
-        $queue = new SplQueue();
+        $queue = new SplQueue;
         $queued = [];
         foreach ($plan->urls as $url) {
             $queue->enqueue($url);
@@ -83,6 +85,7 @@ final class WebsiteCrawler
             $visited[$hash] = true;
             if ((bool) config('maxguard.crawler.respect_robots', true) && ! $robots->allows($url)) {
                 $plan->blockedByRobots++;
+
                 continue;
             }
 
@@ -90,6 +93,7 @@ final class WebsiteCrawler
                 $response = $this->http->get($url);
                 if (! $this->isCrawlable($startUrl, $response->url)) {
                     $plan->failedRequests++;
+
                     continue;
                 }
 
@@ -102,15 +106,19 @@ final class WebsiteCrawler
                 $contentType = strtolower($this->headerValue($response->headers, 'content-type'));
                 if ($response->status >= 400) {
                     $plan->failedRequests++;
+
                     continue;
                 }
                 if ($contentType !== '' && ! str_contains($contentType, 'html')) {
                     $plan->nonHtmlResponses++;
+
                     continue;
                 }
 
                 $page = $this->inspector->inspect($response);
                 $page->meta['crawl_source_url'] = $url;
+                $page->meta['essential_page_type'] = $plan->requiredTypeFor($url)
+                    ?? EssentialPublisherPages::classify($response->url);
                 if ($page->isHomePage()) {
                     $page->meta = array_merge($page->meta, $siteSignals);
                 }
@@ -148,11 +156,11 @@ final class WebsiteCrawler
     }
 
     /**
-     * @param list<array{url: string, required: bool}> $seeds
+     * @param  list<array{url: string, required: bool}>  $seeds
      */
     private function discoverSitemaps(string $startUrl, array $seeds, CrawlPlan $plan): void
     {
-        $queue = new SplQueue();
+        $queue = new SplQueue;
         foreach ($seeds as $seed) {
             $queue->enqueue($seed);
         }
@@ -177,6 +185,7 @@ final class WebsiteCrawler
                 if ($seed['required']) {
                     $plan->sitemapErrors++;
                 }
+
                 continue;
             }
 
@@ -189,12 +198,14 @@ final class WebsiteCrawler
                     if ($seed['required']) {
                         $plan->sitemapErrors++;
                     }
+
                     continue;
                 }
                 if (! $this->sameSiteHost($startUrl, $response->url)) {
                     if ($seed['required']) {
                         $plan->sitemapErrors++;
                     }
+
                     continue;
                 }
 
@@ -209,6 +220,7 @@ final class WebsiteCrawler
                     if ($seed['required']) {
                         $plan->sitemapErrors++;
                     }
+
                     continue;
                 }
 
@@ -222,17 +234,11 @@ final class WebsiteCrawler
                             $resolvedEntries[] = ['url' => $resolved, 'lastmod' => $entry['lastmod']];
                         }
                     }
-                    $postEntries = array_values(array_filter(
-                        $resolvedEntries,
-                        fn (array $entry): bool => $this->isPostSitemap($entry['url'])
-                    ));
-                    if ($plan->configuredLimit > 0 && $postEntries !== []) {
-                        $resolvedEntries = $postEntries;
-                    }
                     usort($resolvedEntries, fn (array $first, array $second): int => $this->lastModifiedTimestamp($second['lastmod']) <=> $this->lastModifiedTimestamp($first['lastmod']));
                     foreach ($resolvedEntries as $entry) {
                         $queue->enqueue(['url' => $entry['url'], 'required' => true]);
                     }
+
                     continue;
                 }
 
@@ -276,16 +282,22 @@ final class WebsiteCrawler
     }
 
     /**
-     * @param list<array{url: string, lastmod: int, post: bool, sequence: int}> $candidates
+     * @param  list<array{url: string, lastmod: int, post: bool, sequence: int}>  $candidates
      */
     private function selectUrls(string $startUrl, array $candidates, CrawlPlan $plan): void
     {
+        foreach ($candidates as $candidate) {
+            $type = EssentialPublisherPages::classify($candidate['url']);
+            if ($type !== null) {
+                $plan->addRequiredUrl($candidate['url'], 'required_page', $type);
+            }
+        }
+
         $postCandidates = array_values(array_filter($candidates, fn (array $candidate): bool => $candidate['post']));
         $limited = $plan->configuredLimit > 0;
 
         if (! $limited) {
             $plan->configureSelection('all_urls', count($candidates), count($candidates), false);
-            $plan->addUrl($startUrl, 'start_url');
             foreach ($candidates as $candidate) {
                 $plan->addUrl($candidate['url'], 'sitemap');
             }
@@ -307,6 +319,34 @@ final class WebsiteCrawler
 
         foreach (array_slice($pool, 0, $plan->limit) as $candidate) {
             $plan->addUrl($candidate['url'], 'sitemap');
+        }
+    }
+
+    private function discoverRequiredPublisherPages(string $startUrl, CrawlPlan $plan): void
+    {
+        try {
+            $response = $this->http->get($startUrl);
+            if ($response->status >= 400 || ! $this->sameSiteHost($startUrl, $response->url)) {
+                return;
+            }
+
+            $page = $this->inspector->inspect($response);
+            foreach ((array) ($page->meta['links_with_text'] ?? []) as $link) {
+                if (! is_array($link)) {
+                    continue;
+                }
+                $resolved = $this->urls->resolve($page->url, (string) ($link['href'] ?? ''));
+                if ($resolved === null || ! $this->isCrawlable($startUrl, $resolved)) {
+                    continue;
+                }
+                $resolved = $this->urls->normalize($resolved);
+                $type = EssentialPublisherPages::classify($resolved, (string) ($link['text'] ?? ''));
+                if ($type !== null && $type !== 'home') {
+                    $plan->addRequiredUrl($resolved, 'required_page', $type);
+                }
+            }
+        } catch (Throwable $exception) {
+            $plan->recordUrlError($startUrl, $exception->getMessage());
         }
     }
 
@@ -424,5 +464,4 @@ final class WebsiteCrawler
 
         return '';
     }
-
 }

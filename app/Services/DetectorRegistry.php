@@ -18,8 +18,7 @@ final class DetectorRegistry
         PageDocument $page,
         string $scanType = 'full',
         bool $includeDuplicateContent = true,
-    ): array
-    {
+    ): array {
         $results = [];
         foreach ($this->detectors() as $detector) {
             if (! $includeDuplicateContent && $detector instanceof DuplicateContentDetector) {
@@ -111,6 +110,10 @@ final class DetectorRegistry
 
     private function included(DetectorResult $result, string $scanType): bool
     {
+        if (str_starts_with($result->ruleKey, 'publisher.')) {
+            return true;
+        }
+
         return match ($scanType) {
             'copyright' => in_array($result->category, ['Copyright', 'Duplicate content'], true),
             'ads' => $result->category === 'Ad experience',

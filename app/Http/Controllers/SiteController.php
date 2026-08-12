@@ -7,9 +7,9 @@ use App\Models\Finding;
 use App\Models\Scan;
 use App\Models\Website;
 use App\Services\AiConfiguration;
-use App\Services\WebsiteAiReviewer;
 use App\Services\CopyrightEvidenceExtractor;
 use App\Services\UrlNormalizer;
+use App\Services\WebsiteAiReviewer;
 use App\Support\UiText;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -79,7 +79,7 @@ final class SiteController extends Controller
         $policyDefinitions = [
             'Nội dung cấm và lừa đảo' => ['Prohibited content', 'Deceptive practices'],
             'Bản quyền và trùng lặp' => ['Copyright', 'Duplicate content'],
-            'Chất lượng nội dung' => ['Content quality', 'Technical trust'],
+            'Chất lượng nội dung' => ['Content quality', 'Technical trust', 'Publisher requirements'],
             'Trải nghiệm quảng cáo' => ['Ad experience'],
             'Quyền riêng tư và đồng ý' => ['Privacy & consent'],
         ];

@@ -14,6 +14,7 @@ final class UiText
         'Deceptive practices' => 'Hành vi lừa đảo',
         'Technical trust' => 'Độ tin cậy kỹ thuật',
         'Third-party moderation' => 'Kiểm duyệt bên thứ ba',
+        'Publisher requirements' => 'Thông tin nhà xuất bản',
         'demo_evidence' => 'Bằng chứng minh họa',
         'manual_review_required' => 'Cần xem xét thủ công',
         'ad_count' => 'Số quảng cáo',
