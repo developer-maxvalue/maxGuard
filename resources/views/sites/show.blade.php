@@ -235,37 +235,37 @@
         </div>
     </div>
 
-    <div class="card mg-card mb-5">
+{{--    <div class="card mg-card mb-5">--}}
 {{--        <div class="card-header border-0 pt-2"><div class="card-title d-block">--}}
 {{--            <h2 class="mg-card-title">Lưu lượng GA4 · 7 ngày gần nhất</h2>--}}
 {{--            <p class="mg-card-subtitle">Lượt quét ưu tiên theo thứ tự lưu lượng từ cao xuống thấp.</p>--}}
 {{--        </div></div>--}}
-        <div class="card-body pt-0">
-            @if (!$ga4)
-                <a class="btn btn-light-primary" href="{{ route('ga4.connect', $site['slug']) }}"><i class="bi bi-google me-2"></i>Kết nối Google Analytics</a>
-            @else
-                <form class="row g-3 align-items-end mb-5" method="POST" action="{{ route('ga4.update', $site['slug']) }}">
-                    @csrf @method('PATCH')
-                    <div class="col-md-5"><label class="form-label">Mã thuộc tính GA4</label>
-                        <input class="form-control" name="property_id" value="{{ $ga4->property_id }}" placeholder="123456789" required>
-                    </div>
-                    <div class="col-auto"><button class="btn btn-light-primary">Lưu thuộc tính</button></div>
-                </form>
-                @if ($ga4->property_id)
-                    <form method="POST" action="{{ route('ga4.sync', $site['slug']) }}" class="mb-5">@csrf
-                        <button class="btn btn-primary">Đồng bộ lưu lượng ngay</button>
-                        <span class="text-muted ms-3">Đồng bộ lần cuối: {{ $ga4->last_synced_at?->diffForHumans() ?? 'chưa bao giờ' }}</span>
-                    </form>
-                @endif
-                @foreach($trafficPages as $page)
-                    <div class="d-flex justify-content-between border-bottom py-2 gap-4">
-                        <span class="text-truncate" title="{{ $page->url }}">{{ $page->url }}</span>
-                        <strong>{{ number_format($page->ga4_views_7d) }} lượt xem</strong>
-                    </div>
-                @endforeach
-            @endif
-        </div>
-    </div>
+{{--        <div class="card-body pt-0">--}}
+{{--            @if (!$ga4)--}}
+{{--                <a class="btn btn-light-primary" href="{{ route('ga4.connect', $site['slug']) }}"><i class="bi bi-google me-2"></i>Kết nối Google Analytics</a>--}}
+{{--            @else--}}
+{{--                <form class="row g-3 align-items-end mb-5" method="POST" action="{{ route('ga4.update', $site['slug']) }}">--}}
+{{--                    @csrf @method('PATCH')--}}
+{{--                    <div class="col-md-5"><label class="form-label">Mã thuộc tính GA4</label>--}}
+{{--                        <input class="form-control" name="property_id" value="{{ $ga4->property_id }}" placeholder="123456789" required>--}}
+{{--                    </div>--}}
+{{--                    <div class="col-auto"><button class="btn btn-light-primary">Lưu thuộc tính</button></div>--}}
+{{--                </form>--}}
+{{--                @if ($ga4->property_id)--}}
+{{--                    <form method="POST" action="{{ route('ga4.sync', $site['slug']) }}" class="mb-5">@csrf--}}
+{{--                        <button class="btn btn-primary">Đồng bộ lưu lượng ngay</button>--}}
+{{--                        <span class="text-muted ms-3">Đồng bộ lần cuối: {{ $ga4->last_synced_at?->diffForHumans() ?? 'chưa bao giờ' }}</span>--}}
+{{--                    </form>--}}
+{{--                @endif--}}
+{{--                @foreach($trafficPages as $page)--}}
+{{--                    <div class="d-flex justify-content-between border-bottom py-2 gap-4">--}}
+{{--                        <span class="text-truncate" title="{{ $page->url }}">{{ $page->url }}</span>--}}
+{{--                        <strong>{{ number_format($page->ga4_views_7d) }} lượt xem</strong>--}}
+{{--                    </div>--}}
+{{--                @endforeach--}}
+{{--            @endif--}}
+{{--        </div>--}}
+{{--    </div>--}}
 
     <div class="card mg-card">
         <div class="card-header border-0 pt-2">
