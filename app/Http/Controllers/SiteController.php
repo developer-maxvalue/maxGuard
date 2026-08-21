@@ -40,7 +40,7 @@ final class SiteController extends Controller
             return $this->exportCsv($query);
         }
 
-        $sites = $query->orderBy('overall_score')->paginate(25)->withQueryString();
+        $sites = $query->orderBy('id', 'DESC')->paginate(25)->withQueryString();
 
         return view('sites.index', [
             'sites' => $sites->through(fn (Website $website): array => $this->row($website)),
