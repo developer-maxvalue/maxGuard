@@ -44,7 +44,7 @@
                             <th>Tình trạng</th>
                             <th>Trang</th>
                             <th>Phạm vi</th>
-                            <th>Vấn đề ưu tiên</th>
+                            <th>Kết quả URL vi phạm</th>
                             <th>Lần quét cuối</th>
                             <th></th>
                         </tr>
@@ -55,7 +55,15 @@
                                 <td>
                                     <a href="{{ route('sites.show', $site['slug']) }}" class="mg-site-cell">
                                         <span>{{ strtoupper(substr($site['domain'], 0, 1)) }}</span>
-                                        <div><strong>{{ $site['domain'] }}</strong><small>{{ $site['findings'] }} phát hiện đang mở</small></div>
+                                        <div><strong>{{ $site['domain'] }}</strong>
+                                            @if ($site['scan_debug'])
+                                                <small class="text-primary"><i class="bi bi-arrow-repeat me-1"></i>{{ \App\Support\UiText::label($site['scan_debug']['status']) }}
+                                                    {{ $site['scan_debug']['progress'] }}% · {{ number_format($site['scan_debug']['pages_scanned']) }}/{{ number_format($site['scan_debug']['pages_discovered']) }} URL</small>
+                                                @if ($site['scan_debug']['current_url'])
+                                                    <small class="text-truncate mw-300px" title="{{ $site['scan_debug']['current_url'] }}">Debug: {{ $site['scan_debug']['current_url'] }}</small>
+                                                @endif
+                                            @endif
+                                        </div>
                                     </a>
                                 </td>
                                 <td>
@@ -75,7 +83,14 @@
                                             class="{{ $site['coverage_partial'] ? 'text-warning' : '' }}">{{ $site['coverage'] }}%</span>
                                     </div>
                                 </td>
-                                <td class="text-gray-700">{{ $site['top_risk'] }}</td>
+                                <td>
+                                    <div class="d-flex flex-wrap gap-2">
+                                        <span class="badge badge-light-danger">Nghiêm trọng: {{ $site['severity_url_counts']['critical'] }}</span>
+                                        <span class="badge badge-light-warning">Cao: {{ $site['severity_url_counts']['high'] }}</span>
+                                        <span class="badge badge-light-primary">Cần xem xét: {{ $site['severity_url_counts']['review'] }}</span>
+                                        <span class="badge badge-light">Thông tin: {{ $site['severity_url_counts']['info'] }}</span>
+                                    </div>
+                                </td>
                                 <td class="text-muted">{{ $site['last_scan'] }}</td>
                                 <td class="text-end"><a href="{{ route('sites.show', $site['slug']) }}"
                                         class="btn btn-sm btn-icon btn-light"><i class="bi bi-arrow-right"></i></a></td>
@@ -120,9 +135,26 @@
                         <div class="form-text">
                             IP riêng, localhost và cổng không tiêu chuẩn sẽ bị chặn.</div>
                     </div>
+                    <div class="mb-5">
+                        <label class="form-label fw-semibold" for="add-website-max-urls">Số URL quét đầu tiên</label>
+                        <input id="add-website-max-urls" type="number" name="max_urls" value="{{ old('max_urls', 100) }}"
+                            min="1" max="{{ max(1, (int) config('maxguard.crawler.max_discovered_urls', 100000)) }}"
+                            class="form-control form-control-solid @error('max_urls') is-invalid @enderror">
+                        @error('max_urls')
+                            <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+                    </div>
+                    <div class="form-check form-check-custom form-check-solid mb-2">
+                        <input class="form-check-input" type="checkbox" value="1" name="scan_all_site"
+                            id="add-website-scan-all" @checked(old('scan_all_site'))>
+                        <label class="form-check-label" for="add-website-scan-all">Quét toàn bộ website (bỏ giới hạn 100 URL)</label>
+                    </div>
                 </div>
-                <div class="modal-footer border-0"><button type="button" class="btn btn-light"
-                        data-bs-dismiss="modal">Hủy</button><button class="btn btn-primary">Thêm website</button></div>
+                <div class="modal-footer border-0">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Hủy</button>
+                    <button class="btn btn-light-primary" name="start_scan" value="0">Chỉ thêm website</button>
+                    <button class="btn btn-primary" name="start_scan" value="1"><i class="bi bi-arrow-repeat me-2"></i>Thêm & quét ngay</button>
+                </div>
             </form>
         </div>
     </div>
@@ -137,3 +169,16 @@
         </script>
     @endpush
 @endif
+
+@push('page-scripts')
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const scanAll = document.getElementById('add-website-scan-all');
+            const maxUrls = document.getElementById('add-website-max-urls');
+            if (!scanAll || !maxUrls) return;
+            const syncScanLimit = () => maxUrls.disabled = scanAll.checked;
+            scanAll.addEventListener('change', syncScanLimit);
+            syncScanLimit();
+        });
+    </script>
+@endpush

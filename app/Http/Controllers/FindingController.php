@@ -5,8 +5,8 @@ namespace App\Http\Controllers;
 use App\Http\Requests\UpdateFindingRequest;
 use App\Models\Finding;
 use App\Models\Scan;
+use App\Support\GooglePolicyReference;
 use App\Support\UiText;
-use App\Services\CopyrightEvidenceExtractor;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
@@ -105,10 +105,10 @@ final class FindingController extends Controller
         ]);
     }
 
-    public function show(Finding $finding, CopyrightEvidenceExtractor $copyrightEvidence): View
+    public function show(Finding $finding): View
     {
         $this->authorizeOwner($finding);
-        $finding->load(['website', 'page.copyrightReviews']);
+        $finding->load(['website', 'page']);
         $rawSignals = (array) ($finding->signals ?? []);
 
         $evidenceQuotes = collect((array) ($rawSignals['evidence'] ?? []))
@@ -128,20 +128,15 @@ final class FindingController extends Controller
                 'method' => (string) ($rawSignals['method'] ?? ''),
             ];
         }
-        $copyrightSourceUrls = $copyrightEvidence->sourceUrls($finding);
-
         return view('findings.show', ['finding' => [
             ...$this->row($finding),
             'url' => $finding->page?->url ?? $finding->website->start_url,
             'policy' => $finding->policy_reference ? UiText::text($finding->policy_reference) : 'Cần đối chiếu chính sách thủ công',
+            'policy_url' => GooglePolicyReference::url($finding->category, $finding->policy_reference),
             'summary' => UiText::text($finding->summary),
             'evidence_quotes' => $evidenceQuotes,
             'duplicate_matches' => $duplicateMatches,
-            'copyright_source_urls' => $copyrightSourceUrls,
-            'is_copyright' => $finding->category === 'Copyright',
             'page_id' => $finding->page?->id,
-            'page_title' => $finding->page?->title,
-            'copyright_review' => $finding->page?->copyrightReviews->first(),
         ]]);
     }
 

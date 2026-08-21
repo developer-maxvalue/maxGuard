@@ -19,6 +19,7 @@ final class StartScanRequest extends FormRequest
             'site' => ['required', 'string', 'max:255'],
             'scan_type' => ['required', 'in:full,priority,copyright,ads,privacy'],
             'max_urls' => ['nullable', 'integer', 'min:1', 'max:'.$safetyLimit],
+            'scan_all_site' => ['nullable', 'boolean'],
             'use_ai' => ['nullable', 'boolean'],
             'force_rescan' => ['nullable', 'boolean'],
         ];

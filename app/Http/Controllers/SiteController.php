@@ -3,15 +3,16 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreWebsiteRequest;
-use App\Models\Finding;
 use App\Models\Scan;
 use App\Models\Website;
 use App\Services\AiConfiguration;
-use App\Services\CopyrightEvidenceExtractor;
+use App\Services\ScanDispatcher;
 use App\Services\UrlNormalizer;
 use App\Services\WebsiteAiReviewer;
+use App\Support\GooglePolicyReference;
 use App\Support\UiText;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -46,7 +47,7 @@ final class SiteController extends Controller
         ]);
     }
 
-    public function store(StoreWebsiteRequest $request, UrlNormalizer $urls): RedirectResponse
+    public function store(StoreWebsiteRequest $request, UrlNormalizer $urls, ScanDispatcher $dispatcher): RedirectResponse
     {
         $data = $request->validated();
         $startUrl = $urls->normalize($data['start_url']);
@@ -61,10 +62,30 @@ final class SiteController extends Controller
             'status' => 'pending',
         ]);
 
-        return redirect()->route('sites.show', $website)->with('status', 'Đã thêm website. Bạn có thể chạy lượt quét tuân thủ đầu tiên.');
+        if (! (bool) ($data['start_scan'] ?? false)) {
+            return redirect()->route('sites.show', $website)->with('status', 'Đã thêm website.');
+        }
+
+        try {
+            $dispatcher->dispatch(
+                $website,
+                'full',
+                auth()->id(),
+                (bool) ($data['scan_all_site'] ?? false) ? null : (int) ($data['max_urls'] ?? 100),
+                false,
+                false,
+            );
+        } catch (\Illuminate\Validation\ValidationException $exception) {
+            return redirect()->route('sites.show', $website)
+                ->withErrors($exception->errors())
+                ->with('status', 'Đã thêm website nhưng chưa thể đưa lượt quét vào hàng đợi.');
+        }
+
+        return redirect()->route('sites.show', $website)
+            ->with('status', 'Đã thêm website và đưa lượt quét đầu tiên vào hàng đợi.');
     }
 
-    public function show(Website $site, AiConfiguration $aiConfiguration, CopyrightEvidenceExtractor $copyrightEvidence): View
+    public function show(Website $site, AiConfiguration $aiConfiguration): View
     {
         $this->authorizeOwner($site);
         $site->load('ga4Connection');
@@ -72,17 +93,14 @@ final class SiteController extends Controller
             ->whereIn('status', [Scan::STATUS_COMPLETED, Scan::STATUS_PARTIAL])
             ->latest('finished_at')
             ->first();
+        $activeScan = $site->scans()
+            ->whereIn('status', [Scan::STATUS_QUEUED, Scan::STATUS_RUNNING])
+            ->latest()
+            ->first();
         $findingSummary = $site->findings()
             ->open()
             ->selectRaw('category, severity, count(*) as aggregate')
             ->groupBy('category', 'severity')
-            ->get();
-        $topFindings = $site->findings()
-            ->open()
-            ->with('page.copyrightReviews')
-            ->orderByRaw("case severity when 'critical' then 1 when 'high' then 2 when 'review' then 3 else 4 end")
-            ->orderByDesc('confidence')
-            ->limit(10)
             ->get();
         $policyDefinitions = [
             'Nội dung cấm và lừa đảo' => ['Prohibited content', 'Deceptive practices'],
@@ -91,71 +109,128 @@ final class SiteController extends Controller
             'Trải nghiệm quảng cáo' => ['Ad experience'],
             'Quyền riêng tư và đồng ý' => ['Privacy & consent'],
         ];
+        $totalUrls = max(0, (int) ($latestScan?->pages_scanned ?: $site->last_scanned_pages ?: $site->pages_count));
 
         $policies = [];
         foreach ($policyDefinitions as $name => $categories) {
             $findings = $findingSummary->whereIn('category', $categories);
-            $penalty = $findings->sum(fn ($finding): int => (int) $finding->aggregate * match ($finding->severity) {
-                'critical' => 30, 'high' => 18, 'review' => 8, default => 2,
-            });
-            $findingCount = (int) $findings->sum('aggregate');
-            $score = max(0, 100 - min(90, $penalty));
+            $affectedUrls = $site->findings()
+                ->open()
+                ->whereIn('category', $categories)
+                ->selectRaw('count(distinct coalesce(page_id, 0)) as aggregate')
+                ->first()?->aggregate;
+            $worstSeverity = collect(['critical', 'high', 'review', 'info'])->first(
+                fn (string $severity): bool => $findings->contains('severity', $severity)
+            );
             $policies[] = [
                 'name' => $name,
-                'score' => $score,
-                'count' => $findingCount.' phát hiện',
-                'status' => Website::statusFromScore($score),
+                'violating_urls' => (int) $affectedUrls,
+                'total_urls' => $totalUrls,
+                'status' => $worstSeverity ?? 'healthy',
             ];
         }
 
-        $riskUrls = $topFindings
-            ->sortBy(fn (Finding $finding): int => match ($finding->severity) {
-                'critical' => 1, 'high' => 2, 'review' => 3, default => 4
-            })
-            ->map(fn (Finding $finding): array => [
-                'finding_id' => $finding->public_id,
-                'path' => $finding->page ? (parse_url($finding->page->url, PHP_URL_PATH) ?: '/') : '/',
-                'issue' => UiText::text($finding->title),
-                'severity' => $finding->severity,
-            ])->values()->all();
+        $findingQuery = $site->findings()->open()->with('page');
+        if (in_array(request('finding_severity'), ['critical', 'high', 'review', 'info'], true)) {
+            $findingQuery->where('severity', request('finding_severity'));
+        }
+        if (request()->filled('finding_category')) {
+            $findingQuery->where('category', (string) request('finding_category'));
+        }
+        $findingReport = $findingQuery
+            ->orderByRaw("case severity when 'critical' then 1 when 'high' then 2 when 'review' then 3 else 4 end")
+            ->orderByDesc('confidence')
+            ->paginate(25, ['*'], 'findings_page')
+            ->withQueryString();
+        $findingCategories = UiText::findingCategories();
+        $aiAssessment = $latestScan?->ai_assessment;
+        $policySection = static fn (string $url): string => match (true) {
+            str_contains($url, '/11190248'), str_contains($url, '/81904') => 'content_overview',
+            str_contains($url, '/11185755') => 'transparency_overview',
+            str_contains($url, '/1348695') => 'adsense_requirements_overview',
+            default => 'policy_overview',
+        };
+        $aiPolicyReferences = collect((array) data_get($aiAssessment, 'policy_references', []))
+            ->filter(fn ($reference): bool => is_array($reference) && filter_var($reference['policy_url'] ?? null, FILTER_VALIDATE_URL) !== false)
+            ->map(function (array $reference) use ($policySection): array {
+                $reference['section'] = in_array($reference['section'] ?? null, ['content_overview', 'transparency_overview', 'adsense_requirements_overview', 'policy_overview'], true)
+                    ? $reference['section']
+                    : $policySection((string) $reference['policy_url']);
 
-        $aiEvidenceExamples = $topFindings
-            ->sortBy(fn (Finding $finding): int => match ($finding->severity) {
-                'critical' => 1, 'high' => 2, 'review' => 3, default => 4
+                return $reference;
             })
-            ->map(function (Finding $finding) use ($site, $copyrightEvidence): array {
-                $signals = (array) ($finding->signals ?? []);
-
-                return [
-                    'finding_id' => $finding->public_id,
-                    'url' => $finding->page?->url ?? $site->start_url,
-                    'title' => UiText::text($finding->title),
-                    'severity' => $finding->severity,
-                    'confidence' => (int) $finding->confidence,
-                    'quotes' => collect((array) ($signals['evidence'] ?? []))
-                        ->merge((array) ($signals['matching_phrases'] ?? []))
-                        ->filter(fn ($quote): bool => is_scalar($quote) && trim((string) $quote) !== '')
-                        ->map(fn ($quote): string => trim((string) $quote))
-                        ->take(3)->values()->all(),
-                    'matched_url' => is_string($signals['matched_url'] ?? null) ? $signals['matched_url'] : null,
-                    'similarity' => isset($signals['similarity']) ? (int) $signals['similarity'] : null,
-                    'source_urls' => $copyrightEvidence->sourceUrls($finding),
-                ];
-            })->values()->all();
+            ->values();
+        if ($aiPolicyReferences->isEmpty() && $aiAssessment) {
+            $aiPolicyReferences = $findingSummary->pluck('category')->unique()->map(fn (string $category): array => [
+                'section' => match ($category) {
+                    'Copyright', 'Duplicate content', 'Content quality' => 'content_overview',
+                    'Deceptive practices', 'Publisher requirements' => 'transparency_overview',
+                    'Privacy & consent' => 'adsense_requirements_overview',
+                    default => 'policy_overview',
+                },
+                'issue' => UiText::label($category),
+                'relevance' => 'Tài liệu Google liên quan đến nhóm vấn đề được phát hiện trong dữ liệu quét.',
+                'policy_url' => GooglePolicyReference::url($category),
+                'policy_title' => GooglePolicyReference::title($category),
+            ])->values();
+        }
 
         return view('sites.show', [
             'site' => array_merge($this->row($site), [
                 'policies' => $policies,
-                'risky_urls' => $riskUrls,
             ]),
             'aiReady' => $aiConfiguration->isReady(),
             'maxUrlSafetyLimit' => max(1, (int) config('maxguard.crawler.max_discovered_urls', 100_000)),
             'ga4' => $site->ga4Connection,
             'trafficPages' => $site->pages()->where('ga4_views_7d', '>', 0)->orderByDesc('ga4_views_7d')->limit(20)->get(),
-            'aiAssessment' => $latestScan?->ai_assessment,
+            'aiAssessment' => $aiAssessment,
+            'aiPolicyReferences' => $aiPolicyReferences,
             'aiAssessedAt' => $latestScan?->ai_assessed_at,
             'aiAssessmentScan' => $latestScan,
-            'aiEvidenceExamples' => $aiEvidenceExamples,
+            'findingReport' => $findingReport,
+            'findingCategories' => $findingCategories,
+            'activeScan' => $activeScan,
+        ]);
+    }
+
+    public function findings(Website $site): JsonResponse
+    {
+        $this->authorizeOwner($site);
+
+        $query = $site->findings()->open()->with('page');
+        $severity = (string) request('severity', '');
+        $category = (string) request('category', '');
+        if (in_array($severity, ['critical', 'high', 'review', 'info'], true)) {
+            $query->where('severity', $severity);
+        }
+        if (array_key_exists($category, UiText::findingCategories())) {
+            $query->where('category', $category);
+        }
+
+        $findings = $query
+            ->orderByRaw("case severity when 'critical' then 1 when 'high' then 2 when 'review' then 3 else 4 end")
+            ->orderByDesc('confidence')
+            ->paginate(25);
+
+        return response()->json([
+            'data' => $findings->getCollection()->map(fn ($finding): array => [
+                'id' => $finding->public_id,
+                'url' => $finding->page?->url ?? $site->start_url,
+                'path' => $finding->page ? (parse_url($finding->page->url, PHP_URL_PATH) ?: '/') : '/',
+                'category' => UiText::label($finding->category),
+                'title' => UiText::text($finding->title),
+                'severity' => $finding->severity,
+                'severity_label' => UiText::label($finding->severity),
+                'confidence' => (int) $finding->confidence,
+                'evidence_url' => route('findings.show', $finding),
+            ])->values(),
+            'meta' => [
+                'current_page' => $findings->currentPage(),
+                'last_page' => $findings->lastPage(),
+                'total' => $findings->total(),
+                'from' => $findings->firstItem(),
+                'to' => $findings->lastItem(),
+            ],
         ]);
     }
 
@@ -208,7 +283,15 @@ final class SiteController extends Controller
 
     private function row(Website $website): array
     {
-        $topFinding = $website->findings()->open()->orderByRaw("case severity when 'critical' then 1 when 'high' then 2 when 'review' then 3 else 4 end")->first();
+        $severityUrlCounts = $website->findings()
+            ->open()
+            ->selectRaw('severity, count(distinct coalesce(page_id, 0)) as aggregate')
+            ->groupBy('severity')
+            ->pluck('aggregate', 'severity');
+        $activeScan = $website->scans()
+            ->whereIn('status', [Scan::STATUS_QUEUED, Scan::STATUS_RUNNING])
+            ->latest()
+            ->first();
         $discovered = (int) $website->last_discovered_pages;
         $scanned = (int) $website->last_scanned_pages;
         if ($discovered === 0 && $website->last_scanned_at !== null) {
@@ -220,9 +303,19 @@ final class SiteController extends Controller
         return [
             'slug' => $website->slug,
             'domain' => $website->domain,
+            'start_url' => $website->start_url,
             'score' => $website->overall_score,
             'status' => $website->status,
-            'top_risk' => $topFinding ? UiText::text($topFinding->title) : 'Không có vấn đề cản trở',
+            'severity_url_counts' => collect(['critical', 'high', 'review', 'info'])
+                ->mapWithKeys(fn (string $severity): array => [$severity => (int) ($severityUrlCounts[$severity] ?? 0)])
+                ->all(),
+            'scan_debug' => $activeScan ? [
+                'status' => $activeScan->status,
+                'progress' => (int) $activeScan->progress,
+                'pages_scanned' => (int) $activeScan->pages_scanned,
+                'pages_discovered' => (int) $activeScan->pages_discovered,
+                'current_url' => $activeScan->current_url,
+            ] : null,
             'findings' => $website->open_findings_count,
             'last_scan' => $website->last_scanned_at?->diffForHumans() ?? 'Chưa bao giờ',
             'pages' => $scanned,

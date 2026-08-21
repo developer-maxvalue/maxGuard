@@ -15,17 +15,6 @@
             <p class="mt-2 mb-0">{{ $finding['site'] }} · Phát hiện {{ $finding['detected'] }} · Độ tin cậy
                 {{ $finding['confidence'] }}%</p>
         </div>
-        <div class="d-flex gap-3">
-            <form method="POST" action="{{ route('findings.update', $finding['id']) }}">@csrf @method('PATCH')<input
-                    type="hidden" name="status" value="investigating"><button class="btn btn-light"><i
-                        class="bi bi-search me-2"></i>Điều tra</button></form>
-            <form method="POST" action="{{ route('findings.update', $finding['id']) }}">@csrf @method('PATCH')<input
-                    type="hidden" name="status" value="remediating"><button class="btn btn-primary"><i
-                        class="bi bi-check2-circle me-2"></i>Bắt đầu khắc phục</button></form>
-            <form method="POST" action="{{ route('findings.update', $finding['id']) }}">@csrf @method('PATCH')<input
-                    type="hidden" name="status" value="resolved"><button class="btn btn-success"><i
-                        class="bi bi-shield-check me-2"></i>Đánh dấu đã xử lý</button></form>
-        </div>
     </div>
 
     <div class="card mg-card mb-5">
@@ -41,46 +30,6 @@
             </div>
         </div>
     </div>
-
-    @if($finding['page_id'])
-        @php($review = $finding['copyright_review'])
-        <div class="card mg-card mb-5"><div class="card-body p-6">
-            <h2 class="mg-card-title">Kiểm tra bản quyền thủ công trên Google</h2>
-            <p class="text-muted">Tìm chính xác tiêu đề trang, kiểm tra các nhà xuất bản trùng khớp rồi lưu kết luận.</p>
-            <a class="btn btn-light-primary mb-4" target="_blank" rel="noopener noreferrer"
-               href="https://www.google.com/search?q={{ urlencode('"' . ($finding['page_title'] ?: $finding['url']) . '"') }}">
-                <i class="bi bi-google me-2"></i>Tìm chính xác tiêu đề
-            </a>
-            <form method="POST" action="{{ route('copyright-reviews.update', $finding['page_id']) }}" class="row g-3">
-                @csrf @method('PATCH')
-                <div class="col-md-3"><select name="status" class="form-select">
-                    @foreach(['pending' => 'Đang chờ', 'clear' => 'Không vi phạm', 'suspected' => 'Nghi ngờ', 'confirmed' => 'Đã xác nhận vi phạm'] as $value => $label)
-                        <option value="{{ $value }}" @selected(($review?->status ?? 'pending') === $value)>{{ $label }}</option>
-                    @endforeach
-                </select></div>
-                <div class="col-md-4"><input type="url" class="form-control" name="matched_url" value="{{ $review?->matched_url }}" placeholder="URL nguồn trùng khớp"></div>
-                <div class="col-md-4"><input class="form-control" name="notes" value="{{ $review?->notes }}" placeholder="Ghi chú kiểm tra"></div>
-                <div class="col-md-1"><button class="btn btn-primary">Lưu</button></div>
-            </form>
-            @if ($finding['is_copyright'])
-                <hr class="my-5">
-                <h3 class="fs-6 mb-3">URL nguồn hoặc tài nguyên cần đối chiếu</h3>
-                @forelse ($finding['copyright_source_urls'] as $sourceUrl)
-                    <div class="d-flex align-items-start gap-3 border rounded p-3 mb-2">
-                        <i class="bi bi-link-45deg text-primary fs-4"></i>
-                        <a class="text-break" href="{{ $sourceUrl }}" target="_blank" rel="noopener noreferrer">{{ $sourceUrl }}</a>
-                    </div>
-                @empty
-                    <div class="alert alert-warning mb-0">
-                        Chưa xác định được URL bài viết hoặc tài nguyên gốc. Finding này mới là tín hiệu cần xác minh, chưa phải bằng chứng rằng nội dung đã sao chép từ một nguồn cụ thể.
-                    </div>
-                @endforelse
-                @if (!empty($finding['copyright_source_urls']))
-                    <p class="text-muted fs-8 mt-3 mb-0">URL ảnh/CDN bên ngoài chỉ chứng minh tài nguyên được tải từ domain khác; không tự động chứng minh vi phạm bản quyền. URL bài gốc chỉ được coi là nguồn đối chiếu sau khi kiểm tra và lưu kết luận ở biểu mẫu phía trên.</p>
-                @endif
-            @endif
-        </div></div>
-    @endif
 
     <div class="row g-5">
         <div class="col-xl-8">
@@ -150,7 +99,10 @@
                     </div>
                     <p class="text-gray-700 lh-lg">{{ $finding['summary'] }}</p>
                     <div class="mg-policy-callout"><i class="bi bi-journal-text"></i>
-                        <div><small>Đối chiếu chính sách</small><strong>{{ $finding['policy'] }}</strong></div>
+                        <div><small>Đối chiếu chính sách</small><strong>{{ $finding['policy'] }}</strong>
+                            <a class="d-inline-flex align-items-center gap-1 mt-2 fs-8" href="{{ $finding['policy_url'] }}"
+                                target="_blank" rel="noopener noreferrer">Xem chính sách chính thức của Google <i class="bi bi-box-arrow-up-right"></i></a>
+                        </div>
                     </div>
                 </div>
             </div>

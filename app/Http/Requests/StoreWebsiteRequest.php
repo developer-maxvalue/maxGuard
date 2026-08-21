@@ -15,9 +15,14 @@ final class StoreWebsiteRequest extends FormRequest
 
     public function rules(): array
     {
+        $safetyLimit = max(1, (int) config('maxguard.crawler.max_discovered_urls', 100_000));
+
         return [
             'name' => ['required', 'string', 'max:120'],
             'start_url' => ['required', 'url', 'max:2048', 'starts_with:http://,https://'],
+            'start_scan' => ['nullable', 'boolean'],
+            'max_urls' => ['nullable', 'integer', 'min:1', 'max:'.$safetyLimit],
+            'scan_all_site' => ['nullable', 'boolean'],
         ];
     }
 

@@ -139,6 +139,7 @@ final class ScanController extends Controller
                 'progress' => $scan->progress,
                 'pages_scanned' => $scan->pages_scanned,
                 'pages_discovered' => $scan->pages_discovered,
+                'current_url' => $scan->current_url,
             ],
             'targets' => $scan->targets()->orderBy('position')->get()->map(fn (ScanTarget $target): array => [
                 'id' => $target->id,
@@ -173,7 +174,7 @@ final class ScanController extends Controller
                     $website,
                     $data['scan_type'],
                     auth()->id(),
-                    isset($data['max_urls']) ? (int) $data['max_urls'] : null,
+                    (bool) ($data['scan_all_site'] ?? false) ? null : (int) ($data['max_urls'] ?? 100),
                     (bool) ($data['use_ai'] ?? false),
                     (bool) ($data['force_rescan'] ?? false),
                 );
@@ -189,9 +190,10 @@ final class ScanController extends Controller
             ])->withInput();
         }
 
-        $response = redirect()
-            ->route('scans.index')
-            ->with('status', "Đã đưa {$queued} lượt quét vào hàng đợi.");
+        $response = $websites->count() === 1
+            ? redirect()->route('sites.show', $websites->first())
+            : redirect()->route('sites.index');
+        $response->with('status', "Đã đưa {$queued} lượt quét vào hàng đợi.");
 
         if ($skipped !== []) {
             $response->with('error', 'Đã bỏ qua '.count($skipped).' lượt quét: '.$skipped[0]);

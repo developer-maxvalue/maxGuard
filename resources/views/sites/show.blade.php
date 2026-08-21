@@ -13,6 +13,20 @@
             </div>
             <p class="mt-2 mb-0">Quét lần cuối {{ $site['last_scan'] }} · Đã phân tích {{ number_format($site['pages']) }} trang
             </p>
+            @if ($activeScan)
+                <div class="mt-3 p-3 rounded bg-light-primary fs-8" id="scan-debug"
+                    data-endpoint="{{ route('scans.targets.live', $activeScan) }}">
+                    <div class="d-flex align-items-center gap-2 mb-1">
+                        <span class="spinner-border spinner-border-sm text-primary" aria-hidden="true"></span>
+                        <strong>Debug đang quét:</strong>
+                        <span data-scan-status>{{ \App\Support\UiText::label($activeScan->status) }}</span>
+                        <span>·</span><span data-scan-progress>{{ $activeScan->progress }}%</span>
+                        <span>·</span><span data-scan-pages>{{ number_format($activeScan->pages_scanned) }}/{{ number_format($activeScan->pages_discovered) }} URL</span>
+                        <a class="ms-auto fw-semibold" href="{{ route('scans.show', $activeScan) }}">Xem debug lượt quét #{{ $activeScan->id }} →</a>
+                    </div>
+                    <div class="text-muted text-break" data-scan-url>{{ $activeScan->current_url ?: 'Đang chuẩn bị danh sách URL…' }}</div>
+                </div>
+            @endif
         </div>
         <div class="d-flex gap-3">
             <form method="POST" action="{{ route('sites.ai-assessment', $site['slug']) }}">
@@ -22,8 +36,6 @@
                     <i class="bi bi-stars me-2"></i>{{ $aiAssessment ? 'AI đánh giá lại' : 'AI đánh giá' }}
                 </button>
             </form>
-            <a href="{{ route('findings.index', ['q' => $site['domain']]) }}" class="btn btn-light"><i
-                    class="bi bi-folder2-open me-2"></i>Hồ sơ đang mở</a>
             <form method="POST" action="{{ route('scans.store') }}">
                 @csrf
                 <input type="hidden" name="site" value="{{ $site['domain'] }}">
@@ -33,9 +45,13 @@
                 @endif
                 <div class="input-group">
                     <input class="form-control form-control-solid" style="max-width: 150px" type="number" name="max_urls"
-                        min="1" max="{{ $maxUrlSafetyLimit }}" placeholder="Bài viết mới nhất">
+                        min="1" max="{{ $maxUrlSafetyLimit }}" value="100" aria-label="Số URL quét">
                     <button class="btn btn-primary"><i
                             class="bi bi-arrow-repeat me-2"></i>Quét lại{{ $aiReady ? ' + AI' : '' }}</button>
+                </div>
+                <div class="form-check form-check-custom form-check-solid mt-2">
+                    <input class="form-check-input" type="checkbox" value="1" name="scan_all_site" id="detail-scan-all">
+                    <label class="form-check-label fs-8" for="detail-scan-all">Quét toàn bộ website</label>
                 </div>
             </form>
             <form method="POST" action="{{ route('sites.destroy', $site['slug']) }}"
@@ -63,31 +79,41 @@
         </div>
     @endif
 
-    <div class="row g-5 mb-5">
-        <div class="col-xl-3 col-md-6">
-            <div class="card mg-card h-100">
-                <div class="card-body p-6">
-                    <div class="mg-eyebrow mb-4">Điểm tổng thể</div>
-                    <div class="d-flex align-items-center gap-5"><x-score-ring :score="$site['score']" />
-                        <div><strong class="mg-score-{{ $site['status'] }} d-block mb-2">Mức rủi ro
-                                {{ ['critical' => 'nghiêm trọng', 'high' => 'cao', 'review' => 'cần xem xét', 'healthy' => 'thấp', 'pending' => 'đang chờ'][$site['status']] ?? $site['status'] }}</strong><span class="text-muted fs-7">Ưu tiên các phát hiện có độ tin cậy cao nhất trước.</span></div>
-                    </div>
-                </div>
+    <div class="card mg-card mb-5">
+        <div class="card-header border-0 pt-2">
+            <div class="card-title d-block">
+                <h2 class="mg-card-title">Phân tích tình trạng chính sách</h2>
+                <p class="mg-card-subtitle">Số URL vi phạm trong từng hạng mục trên tổng số URL đã phân tích.</p>
             </div>
         </div>
-        <div class="col-xl-3 col-md-6"><x-metric-card label="Độ phủ lượt quét" :value="$site['coverage'].'%'"
-                :note="number_format($site['pages']).' / '.number_format($site['discovered_pages']).' URL'" tone="info" icon="bi-bullseye" /></div>
-        <div class="col-xl-3 col-md-6"><x-metric-card label="Trang đã phân tích" :value="number_format($site['pages'])" :note="$site['coverage'] . '% trong ' . number_format($site['discovered_pages']) . ' URL được phát hiện'"
-                tone="primary" icon="bi-file-earmark-text" /></div>
-        <div class="col-xl-3 col-md-6"><x-metric-card label="Phát hiện đang mở" :value="(string) $site['findings']"
-                note="Vấn đề nghiêm trọng cần xem xét" tone="warning" icon="bi-exclamation-diamond" /></div>
+        <div class="card-body pt-1">
+            <div class="row g-4">
+                @foreach ($site['policies'] as $policy)
+                    <div class="col-md-6 col-xxl-3">
+                        <div class="mg-policy-card">
+                            <div class="d-flex justify-content-between align-items-start gap-3 mb-5">
+                                <strong>{{ $policy['name'] }}</strong><x-status-badge :status="$policy['status']" />
+                            </div>
+                            <div class="d-flex align-items-baseline justify-content-between">
+                                <div><span class="mg-policy-score mg-score-{{ $policy['status'] }}">{{ number_format($policy['violating_urls']) }}</span><small
+                                        class="text-muted"> / {{ number_format($policy['total_urls']) }} URL</small></div>
+                            </div>
+                            <div class="progress h-6px mt-4">
+                                <div class="progress-bar mg-progress-{{ $policy['status'] }}"
+                                    style="width: {{ $policy['total_urls'] > 0 ? min(100, round(($policy['violating_urls'] / $policy['total_urls']) * 100)) : 0 }}%"></div>
+                            </div>
+                        </div>
+                    </div>
+                @endforeach
+            </div>
+        </div>
     </div>
 
     <div class="card mg-card mb-5">
         <div class="card-header border-0 pt-2">
             <div class="card-title d-block">
                 <h2 class="mg-card-title"><i class="bi bi-stars text-primary me-2"></i>Nhận định tổng hợp từ AI</h2>
-                <p class="mg-card-subtitle">AI đọc điểm số, độ phủ, finding, độ tin cậy, URL và bằng chứng của lượt quét gần nhất.</p>
+                <p class="mg-card-subtitle">AI tổng hợp cấu trúc, nội dung, quảng cáo và tình trạng chính sách trên toàn bộ dữ liệu website đã quét.</p>
             </div>
             @if ($aiAssessedAt)
                 <div class="card-toolbar text-muted fs-8">Cập nhật {{ $aiAssessedAt->diffForHumans() }}</div>
@@ -103,42 +129,32 @@
                     <x-status-badge :status="$aiAssessment['risk_level'] ?? $site['status']" />
                 </div>
 
-                @if (!empty($aiAssessment['key_issues']))
-                    <div class="row g-4 mb-5">
-                        @foreach ($aiAssessment['key_issues'] as $issue)
-                            <div class="col-lg-6">
-                                <div class="border rounded p-4 h-100">
-                                    <div class="d-flex justify-content-between gap-3 mb-3">
-                                        <strong>{{ $issue['title'] ?? 'Vấn đề cần xem xét' }}</strong>
-                                        <x-status-badge :status="$issue['severity'] ?? 'review'" />
-                                    </div>
-                                    <p class="mb-2 text-gray-700">{{ $issue['why_it_matters'] ?? '' }}</p>
-                                    @if (!empty($issue['evidence']))
-                                        <p class="mb-2 fs-8"><strong>Căn cứ:</strong> {{ $issue['evidence'] }}</p>
-                                    @endif
-                                    @if (!empty($issue['affected_urls']))
-                                        <div class="mb-2 fs-8"><strong>URL liên quan:</strong>
-                                            @foreach ($issue['affected_urls'] as $url)
-                                                <a class="d-block text-break mt-1" href="{{ $url }}" target="_blank" rel="noopener noreferrer">{{ $url }}</a>
-                                            @endforeach
-                                        </div>
-                                    @endif
-                                    @if (!empty($issue['evidence_quotes']))
-                                        @foreach ($issue['evidence_quotes'] as $quote)
-                                            <blockquote class="border-start border-3 border-warning ps-3 mt-2 mb-2 fs-8">{{ $quote }}</blockquote>
-                                        @endforeach
-                                    @endif
-                                    @if (!empty($issue['source_urls']))
-                                        <div class="mb-2 fs-8"><strong>Nguồn/tài nguyên đối chiếu:</strong>
-                                            @foreach ($issue['source_urls'] as $url)
-                                                <a class="d-block text-break mt-1" href="{{ $url }}" target="_blank" rel="noopener noreferrer">{{ $url }}</a>
-                                            @endforeach
-                                        </div>
-                                    @endif
-                                    <p class="mb-0 fs-8"><strong>Khắc phục:</strong> {{ $issue['recommendation'] ?? '' }}</p>
-                                </div>
-                            </div>
-                        @endforeach
+                @if (!empty($aiAssessment['content_overview']))
+                    <div class="border rounded p-4 mb-4">
+                        <strong class="d-block mb-2">Tổng quan nội dung và cấu trúc</strong>
+                        <p class="mb-0 text-gray-700">{{ $aiAssessment['content_overview'] }}</p>
+                        @include('sites.partials.ai-policy-references', ['section' => 'content_overview'])
+                    </div>
+                @endif
+                @if (!empty($aiAssessment['transparency_overview']))
+                    <div class="border rounded p-4 mb-4">
+                        <strong class="d-block mb-2">Tính trung thực và minh bạch của nhà xuất bản</strong>
+                        <p class="mb-0 text-gray-700">{{ $aiAssessment['transparency_overview'] }}</p>
+                        @include('sites.partials.ai-policy-references', ['section' => 'transparency_overview'])
+                    </div>
+                @endif
+                @if (!empty($aiAssessment['adsense_requirements_overview']))
+                    <div class="border rounded p-4 mb-4">
+                        <strong class="d-block mb-2">Đối chiếu yêu cầu AdSense</strong>
+                        <p class="mb-0 text-gray-700">{{ $aiAssessment['adsense_requirements_overview'] }}</p>
+                        @include('sites.partials.ai-policy-references', ['section' => 'adsense_requirements_overview'])
+                    </div>
+                @endif
+                @if (!empty($aiAssessment['policy_overview']))
+                    <div class="border rounded p-4 mb-5">
+                        <strong class="d-block mb-2">Tổng quan tình trạng chính sách</strong>
+                        <p class="mb-0 text-gray-700">{{ $aiAssessment['policy_overview'] }}</p>
+                        @include('sites.partials.ai-policy-references', ['section' => 'policy_overview'])
                     </div>
                 @endif
 
@@ -156,37 +172,6 @@
                     </div>
                 @endif
 
-                @if (!empty($aiEvidenceExamples))
-                    <hr class="my-6">
-                    <h3 class="fs-6 mb-2">URL và căn cứ tiêu biểu từ dữ liệu quét</h3>
-                    <p class="text-muted fs-8 mb-4">Danh sách này lấy trực tiếp từ finding, không phải URL do AI tự suy đoán.</p>
-                    @foreach ($aiEvidenceExamples as $example)
-                        <div class="border rounded p-4 mb-3">
-                            <div class="d-flex justify-content-between gap-3 mb-2">
-                                <a href="{{ route('findings.show', $example['finding_id']) }}"><strong>{{ $example['title'] }}</strong></a>
-                                <x-status-badge :status="$example['severity']" />
-                            </div>
-                            <a class="d-block text-break fs-8 mb-2" href="{{ $example['url'] }}" target="_blank" rel="noopener noreferrer">{{ $example['url'] }}</a>
-                            @foreach ($example['quotes'] as $quote)
-                                <blockquote class="border-start border-3 border-warning ps-3 my-2 fs-8">{{ $quote }}</blockquote>
-                            @endforeach
-                            @if ($example['matched_url'])
-                                <div class="bg-light-danger rounded p-3 mt-3 fs-8">
-                                    <strong>Trùng {{ $example['similarity'] !== null ? $example['similarity'].'%' : '' }} với:</strong>
-                                    <a class="d-block text-break mt-1" href="{{ $example['matched_url'] }}" target="_blank" rel="noopener noreferrer">{{ $example['matched_url'] }}</a>
-                                </div>
-                            @endif
-                            @if (!empty($example['source_urls']))
-                                <div class="bg-light rounded p-3 mt-3 fs-8">
-                                    <strong>URL nguồn/tài nguyên cần đối chiếu:</strong>
-                                    @foreach ($example['source_urls'] as $sourceUrl)
-                                        <a class="d-block text-break mt-1" href="{{ $sourceUrl }}" target="_blank" rel="noopener noreferrer">{{ $sourceUrl }}</a>
-                                    @endforeach
-                                </div>
-                            @endif
-                        </div>
-                    @endforeach
-                @endif
             @else
                 <div class="text-center py-7">
                     <i class="bi bi-stars fs-1 text-primary"></i>
@@ -200,38 +185,6 @@
                     @endif
                 </div>
             @endif
-        </div>
-    </div>
-
-    <div class="card mg-card mb-5">
-        <div class="card-header border-0 pt-2">
-            <div class="card-title d-block">
-                <h2 class="mg-card-title">Phân tích tình trạng chính sách</h2>
-                <p class="mg-card-subtitle">Điểm số kết hợp bằng chứng trang, mức độ nghiêm trọng và độ tin cậy của từng phát hiện.</p>
-            </div>
-        </div>
-        <div class="card-body pt-1">
-            <div class="row g-4">
-                @foreach ($site['policies'] as $policy)
-                    <div class="col-md-6 col-xxl-3">
-                        <div class="mg-policy-card">
-                            <div class="d-flex justify-content-between align-items-start gap-3 mb-5">
-                                <strong>{{ $policy['name'] }}</strong><x-status-badge :status="$policy['status']" />
-                            </div>
-                            <div class="d-flex align-items-baseline justify-content-between">
-                                <div><span
-                                        class="mg-policy-score mg-score-{{ $policy['status'] }}">{{ $policy['score'] }}</span><small
-                                        class="text-muted">/100</small></div><span
-                                    class="text-muted fs-7">{{ $policy['count'] }}</span>
-                            </div>
-                            <div class="progress h-6px mt-4">
-                                <div class="progress-bar mg-progress-{{ $policy['status'] }}"
-                                    style="width: {{ $policy['score'] }}%"></div>
-                            </div>
-                        </div>
-                    </div>
-                @endforeach
-            </div>
         </div>
     </div>
 
@@ -270,36 +223,218 @@
     <div class="card mg-card">
         <div class="card-header border-0 pt-2">
             <div class="card-title d-block">
-                <h2 class="mg-card-title">URL có rủi ro cao nhất</h2>
-                <p class="mg-card-subtitle">Ưu tiên các trang có khả năng khiến tài khoản bị xử lý cao nhất.</p>
+                <h2 class="mg-card-title">Báo cáo phát hiện</h2>
+                <p class="mg-card-subtitle">Danh sách vi phạm của website, có thể lọc theo mức độ và danh mục.</p>
             </div>
-            <div class="card-toolbar"><a href="{{ route('findings.index') }}" class="btn btn-light-primary btn-sm">Xem tất cả phát hiện</a></div>
         </div>
         <div class="card-body pt-0">
+            <form method="GET" class="row g-3 align-items-end mb-5" id="finding-report-filter"
+                data-endpoint="{{ route('sites.findings', $site['slug']) }}">
+                <div class="col-md-3">
+                    <label class="form-label" for="finding-severity">Mức độ</label>
+                    <select class="form-select form-select-solid" id="finding-severity" name="finding_severity">
+                        <option value="">Tất cả mức độ</option>
+                        <option value="critical" @selected(request('finding_severity') === 'critical')>Nghiêm trọng</option>
+                        <option value="high" @selected(request('finding_severity') === 'high')>Cao</option>
+                        <option value="review" @selected(request('finding_severity') === 'review')>Cần xem xét</option>
+                        <option value="info" @selected(request('finding_severity') === 'info')>Thông tin</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label" for="finding-category">Danh mục vi phạm</label>
+                    <select class="form-select form-select-solid" id="finding-category" name="finding_category">
+                        <option value="">Tất cả danh mục</option>
+                        @foreach ($findingCategories as $category => $label)
+                            <option value="{{ $category }}" @selected(request('finding_category') === $category)>{{ $label }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div class="col-auto"><button class="btn btn-primary" type="submit" data-filter-submit>Lọc báo cáo</button></div>
+                <div class="col-auto @if (!request()->filled('finding_severity') && !request()->filled('finding_category')) d-none @endif" data-clear-filter-wrap>
+                    <button class="btn btn-light" type="button" data-clear-filter>Xóa lọc</button>
+                </div>
+                <div class="col-auto d-none" data-filter-loading><span class="spinner-border spinner-border-sm text-primary me-2"></span>Đang tải…</div>
+            </form>
             <div class="table-responsive">
                 <table class="table align-middle table-row-dashed gy-4 mg-table">
                     <thead>
                         <tr class="text-uppercase text-muted fs-8">
                             <th>URL</th>
-                            <th>Vấn đề chính</th>
+                            <th>Danh mục</th>
+                            <th>Phát hiện</th>
                             <th>Mức độ</th>
+                            <th>Độ tin cậy</th>
                             <th></th>
                         </tr>
                     </thead>
-                    <tbody>
-                        @foreach ($site['risky_urls'] as $url)
+                    <tbody id="finding-report-body">
+                        @forelse ($findingReport as $finding)
                             <tr>
-                                <td class="mw-350px"><span
-                                        class="d-block text-truncate fw-semibold">{{ $url['path'] }}</span></td>
-                                <td class="text-gray-700">{{ $url['issue'] }}</td>
-                                <td><x-status-badge :status="$url['severity']" /></td>
-                                <td class="text-end"><a href="{{ route('findings.show', $url['finding_id']) }}"
+                                <td class="mw-350px"><a class="d-block text-truncate fw-semibold" href="{{ $finding->page?->url ?? $site['start_url'] }}"
+                                        target="_blank" rel="noopener noreferrer">{{ $finding->page ? (parse_url($finding->page->url, PHP_URL_PATH) ?: '/') : '/' }}</a></td>
+                                <td>{{ \App\Support\UiText::label($finding->category) }}</td>
+                                <td class="text-gray-700">{{ \App\Support\UiText::text($finding->title) }}</td>
+                                <td><x-status-badge :status="$finding->severity" /></td>
+                                <td>{{ $finding->confidence }}%</td>
+                                <td class="text-end"><a href="{{ route('findings.show', $finding) }}"
                                         class="btn btn-sm btn-light-primary">Xem bằng chứng</a></td>
                             </tr>
-                        @endforeach
+                        @empty
+                            <tr><td colspan="6" class="text-center text-muted py-7">Không có phát hiện phù hợp với bộ lọc.</td></tr>
+                        @endforelse
                     </tbody>
                 </table>
             </div>
+            <div class="mt-5" id="finding-report-pagination">{{ $findingReport->links() }}</div>
         </div>
     </div>
 @endsection
+
+@push('page-scripts')
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const scanAll = document.getElementById('detail-scan-all');
+            const maxUrls = scanAll?.closest('form')?.querySelector('input[name="max_urls"]');
+            if (scanAll && maxUrls) {
+                const syncScanLimit = () => maxUrls.disabled = scanAll.checked;
+                scanAll.addEventListener('change', syncScanLimit);
+                syncScanLimit();
+            }
+
+            const debug = document.getElementById('scan-debug');
+            if (debug) {
+                const refreshDebug = async () => {
+                    try {
+                        const response = await fetch(debug.dataset.endpoint, {headers: {'Accept': 'application/json'}});
+                        if (!response.ok) return;
+                        const payload = await response.json();
+                        const scan = payload.scan;
+                        debug.querySelector('[data-scan-status]').textContent = scan.status === 'running' ? 'Đang chạy' : (scan.status === 'queued' ? 'Đang chờ' : scan.status);
+                        debug.querySelector('[data-scan-progress]').textContent = `${scan.progress}%`;
+                        debug.querySelector('[data-scan-pages]').textContent = `${scan.pages_scanned}/${scan.pages_discovered} URL`;
+                        debug.querySelector('[data-scan-url]').textContent = scan.current_url || 'Đang chuẩn bị danh sách URL…';
+                        if (!['queued', 'running'].includes(scan.status)) window.location.reload();
+                    } catch (error) {
+                        // Giữ dữ liệu gần nhất nếu kết nối tạm thời bị gián đoạn.
+                    }
+                };
+                window.setInterval(refreshDebug, 3000);
+            }
+
+            const filter = document.getElementById('finding-report-filter');
+            const reportBody = document.getElementById('finding-report-body');
+            const pagination = document.getElementById('finding-report-pagination');
+            if (!filter || !reportBody || !pagination) return;
+
+            const severity = filter.querySelector('[name="finding_severity"]');
+            const category = filter.querySelector('[name="finding_category"]');
+            const loading = filter.querySelector('[data-filter-loading]');
+            const clearWrap = filter.querySelector('[data-clear-filter-wrap]');
+            const submitButton = filter.querySelector('[data-filter-submit]');
+            let requestController;
+
+            const element = (tag, className, text) => {
+                const node = document.createElement(tag);
+                if (className) node.className = className;
+                if (text !== undefined) node.textContent = text;
+                return node;
+            };
+            const appendCell = (row, child, className = '') => {
+                const cell = element('td', className);
+                cell.append(child);
+                row.append(cell);
+            };
+            const renderRows = (items) => {
+                reportBody.replaceChildren();
+                if (!items.length) {
+                    const row = element('tr');
+                    const cell = element('td', 'text-center text-muted py-7', 'Không có phát hiện phù hợp với bộ lọc.');
+                    cell.colSpan = 6;
+                    row.append(cell);
+                    reportBody.append(row);
+                    return;
+                }
+                const tones = {critical: 'danger', high: 'warning', review: 'info', info: 'info'};
+                items.forEach((item) => {
+                    const row = element('tr');
+                    const url = element('a', 'd-block text-truncate fw-semibold', item.path);
+                    url.href = item.url;
+                    url.target = '_blank';
+                    url.rel = 'noopener noreferrer';
+                    appendCell(row, url, 'mw-350px');
+                    appendCell(row, element('span', '', item.category));
+                    appendCell(row, element('span', 'text-gray-700', item.title));
+                    appendCell(row, element('span', `badge mg-status mg-status-${tones[item.severity] || 'secondary'}`, item.severity_label));
+                    appendCell(row, element('span', '', `${item.confidence}%`));
+                    const evidence = element('a', 'btn btn-sm btn-light-primary', 'Xem bằng chứng');
+                    evidence.href = item.evidence_url;
+                    appendCell(row, evidence, 'text-end');
+                    reportBody.append(row);
+                });
+            };
+            const renderPagination = (meta) => {
+                pagination.replaceChildren();
+                if (meta.last_page <= 1) return;
+                const wrap = element('div', 'd-flex align-items-center justify-content-between gap-3');
+                wrap.append(element('span', 'text-muted fs-8', `Hiển thị ${meta.from || 0}–${meta.to || 0} / ${meta.total}`));
+                const buttons = element('div', 'd-flex gap-2');
+                [['Trước', meta.current_page - 1], ['Sau', meta.current_page + 1]].forEach(([label, page]) => {
+                    const button = element('button', 'btn btn-sm btn-light-primary', label);
+                    button.type = 'button';
+                    button.dataset.page = page;
+                    button.disabled = page < 1 || page > meta.last_page;
+                    buttons.append(button);
+                });
+                wrap.append(buttons);
+                pagination.append(wrap);
+            };
+            const loadFindings = async (page = 1) => {
+                requestController?.abort();
+                requestController = new AbortController();
+                const params = new URLSearchParams({page});
+                if (severity.value) params.set('severity', severity.value);
+                if (category.value) params.set('category', category.value);
+                loading.classList.remove('d-none');
+                if (submitButton) submitButton.disabled = true;
+                try {
+                    const response = await fetch(`${filter.dataset.endpoint}?${params}`, {
+                        headers: {'Accept': 'application/json'},
+                        signal: requestController.signal,
+                    });
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    const payload = await response.json();
+                    renderRows(payload.data || []);
+                    renderPagination(payload.meta);
+                    clearWrap.classList.toggle('d-none', !severity.value && !category.value);
+                    const browserParams = new URLSearchParams();
+                    if (severity.value) browserParams.set('finding_severity', severity.value);
+                    if (category.value) browserParams.set('finding_category', category.value);
+                    const query = browserParams.toString();
+                    window.history.replaceState({}, '', `${window.location.pathname}${query ? `?${query}` : ''}`);
+                } catch (error) {
+                    if (error.name !== 'AbortError') window.alert('Không thể tải báo cáo. Vui lòng thử lại.');
+                } finally {
+                    loading.classList.add('d-none');
+                    if (submitButton) submitButton.disabled = false;
+                }
+            };
+
+            filter.addEventListener('submit', (event) => {
+                event.preventDefault();
+                loadFindings();
+            });
+            filter.querySelector('[data-clear-filter]').addEventListener('click', () => {
+                severity.value = '';
+                category.value = '';
+                loadFindings();
+            });
+            pagination.addEventListener('click', (event) => {
+                const trigger = event.target.closest('[data-page], a');
+                if (!trigger) return;
+                event.preventDefault();
+                const page = trigger.dataset.page || new URL(trigger.href).searchParams.get('findings_page') || 1;
+                loadFindings(Number(page));
+            });
+        });
+    </script>
+@endpush

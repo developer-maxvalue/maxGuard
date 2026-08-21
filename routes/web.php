@@ -4,7 +4,6 @@ use App\Http\Controllers\AdminController;
 use App\Http\Controllers\AiSettingController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CopyrightReviewController;
-use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FindingController;
 use App\Http\Controllers\Ga4Controller;
 use App\Http\Controllers\ScanController;
@@ -24,13 +23,14 @@ if ((bool) config('maxguard.provide_auth_routes', true)) {
     }
 }
 
-Route::redirect('/', '/dashboard');
+Route::redirect('/', '/sites');
 
 Route::middleware(config('maxguard.route_middleware', ['auth']))->group(function (): void {
-    Route::get('/dashboard', DashboardController::class)->name('dashboard');
+    Route::redirect('/dashboard', '/sites')->name('dashboard');
 
     Route::get('/sites', [SiteController::class, 'index'])->name('sites.index');
     Route::post('/sites', [SiteController::class, 'store'])->name('sites.store');
+    Route::get('/sites/{site}/findings', [SiteController::class, 'findings'])->name('sites.findings');
     Route::get('/sites/{site}', [SiteController::class, 'show'])->name('sites.show');
     Route::post('/sites/{site}/ai-assessment', [SiteController::class, 'assess'])->name('sites.ai-assessment');
     Route::delete('/sites/{site}', [SiteController::class, 'destroy'])->name('sites.destroy');

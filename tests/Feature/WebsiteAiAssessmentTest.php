@@ -31,6 +31,16 @@ final class WebsiteAiAssessmentTest extends TestCase
                     'risk_level' => 'high',
                     'headline' => 'Website cần xử lý sớm hai nhóm vấn đề',
                     'summary' => 'Điểm thấp chủ yếu đến từ trải nghiệm quảng cáo và chất lượng nội dung.',
+                    'content_overview' => 'Tổng quan chất lượng nội dung trên toàn website.',
+                    'transparency_overview' => 'Chưa đủ tín hiệu về danh tính và tính minh bạch của nhà xuất bản.',
+                    'adsense_requirements_overview' => 'Cần hoàn thiện disclosure quyền riêng tư theo yêu cầu AdSense.',
+                    'policy_overview' => 'Dữ liệu quét ghi nhận rủi ro chính sách cần xử lý.',
+                    'policy_references' => [[
+                        'section' => 'content_overview',
+                        'issue' => 'Nội dung trùng lặp',
+                        'relevance' => 'Nội dung sao chép cần có giá trị gia tăng độc lập.',
+                        'policy_url' => 'https://support.google.com/publisherpolicies/answer/11190248?hl=vi',
+                    ]],
                     'key_issues' => [[
                         'title' => 'Mật độ quảng cáo cao',
                         'severity' => 'high',
@@ -97,10 +107,20 @@ final class WebsiteAiAssessmentTest extends TestCase
             ->get(route('sites.show', $website))
             ->assertOk()
             ->assertSee('Nhận định tổng hợp từ AI')
-            ->assertSee('Mật độ quảng cáo cao');
+            ->assertSee('Tính trung thực và minh bạch của nhà xuất bản')
+            ->assertSee('Đối chiếu yêu cầu AdSense')
+            ->assertSee('Chính sách AdSense/Google liên quan')
+            ->assertSeeInOrder([
+                'Tổng quan nội dung và cấu trúc',
+                'https://support.google.com/publisherpolicies/answer/11190248?hl=vi',
+                'Tính trung thực và minh bạch của nhà xuất bản',
+            ], false);
 
         Http::assertSent(fn ($request): bool => str_contains($request->body(), 'MG-TEST')
-            && str_contains($request->body(), 'coverage_percent'));
+            && str_contains($request->body(), 'coverage_percent')
+            && str_contains($request->body(), 'adsense_policy_review_matrix')
+            && str_contains($request->body(), 'policy_references')
+            && str_contains($request->body(), 'Publisher identity, honesty and transparency'));
     }
 
     public function test_gemini_uses_query_api_key_without_a_bearer_header(): void

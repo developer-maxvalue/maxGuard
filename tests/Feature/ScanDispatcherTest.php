@@ -34,7 +34,7 @@ final class ScanDispatcherTest extends TestCase
             'max_urls' => 250,
             'use_ai' => false,
             'force_rescan' => true,
-            'ruleset_version' => '1.3.0',
+            'ruleset_version' => '1.4.0',
         ]);
         Queue::assertPushed(RunWebsiteScan::class, fn (RunWebsiteScan $job): bool => $job->scan->is($scan));
     }

@@ -4,20 +4,15 @@
             <i class="bi bi-list fs-2"></i>
         </button>
 
-        <form class="mg-search" method="GET" action="{{ route('findings.index') }}" role="search">
+        <form class="mg-search" method="GET" action="{{ route('sites.index') }}" role="search">
             <i class="bi bi-search"></i>
-            <input type="search" name="q" value="{{ request()->routeIs('findings.*') ? request('q') : '' }}"
-                placeholder="Tìm website, URL hoặc phát hiện…" aria-label="Tìm kiếm toàn hệ thống">
+            <input type="search" name="q" value="{{ request()->routeIs('sites.index') ? request('q') : '' }}"
+                placeholder="Tìm website…" aria-label="Tìm website">
             <kbd>⌘ K</kbd>
         </form>
     </div>
 
     <div class="d-flex align-items-center gap-3">
-        <a class="btn btn-icon btn-light position-relative"
-            href="{{ route('findings.index', ['severity' => 'critical']) }}" aria-label="Phát hiện nghiêm trọng">
-            <i class="bi bi-bell fs-4"></i>
-            <span class="mg-notification-dot"></span>
-        </a>
         @php
             $displayName = auth()->user()?->name ?? 'Quản trị viên';
             $initials = collect(preg_split('/\s+/', trim($displayName)))

@@ -4,6 +4,18 @@ namespace App\Support;
 
 final class UiText
 {
+    public const FINDING_CATEGORIES = [
+        'Copyright' => 'Bản quyền',
+        'Duplicate content' => 'Nội dung trùng lặp',
+        'Ad experience' => 'Trải nghiệm quảng cáo',
+        'Content quality' => 'Chất lượng nội dung',
+        'Privacy & consent' => 'Quyền riêng tư và đồng ý',
+        'Prohibited content' => 'Nội dung bị cấm',
+        'Deceptive practices' => 'Hành vi lừa đảo',
+        'Technical trust' => 'Độ tin cậy kỹ thuật',
+        'Publisher requirements' => 'Thông tin nhà xuất bản',
+    ];
+
     private const LABELS = [
         'Copyright' => 'Bản quyền',
         'Duplicate content' => 'Nội dung trùng lặp',
@@ -89,6 +101,12 @@ final class UiText
     public static function label(?string $value): string
     {
         return self::LABELS[$value ?? ''] ?? (string) $value;
+    }
+
+    /** @return array<string, string> */
+    public static function findingCategories(): array
+    {
+        return self::FINDING_CATEGORIES;
     }
 
     public static function text(?string $value): string
