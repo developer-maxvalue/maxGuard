@@ -67,8 +67,10 @@
                                     </a>
                                 </td>
                                 <td>
-                                    <div class="d-flex align-items-center gap-3"><strong
-                                            class="mg-score-text mg-score-{{ $site['status'] }}">{{ $site['score'] }}</strong><x-status-badge
+                                    <div class="d-flex align-items-center gap-3">
+{{--                                        <strong--}}
+{{--                                            class="mg-score-text mg-score-{{ $site['status'] }}">{{ $site['score'] }}</strong>--}}
+                                        <x-status-badge
                                             :status="$site['status']" />
                                     </div>
                                 </td>
