@@ -166,6 +166,7 @@ final class WebsiteAiAssessmentTest extends TestCase
             ->assertSee('Danh mục:')
             ->assertSee('Trải nghiệm quảng cáo')
             ->assertDontSee('Danh mục trong Báo cáo phát hiện:')
+            ->assertDontSee('Giới hạn đánh giá:')
             ->assertSee('Độ chắc chắn và cách giải thích khác')
             ->assertSee('https://support.google.com/adsense/answer/1346295?hl=vi', false)
             ->assertSeeInOrder([

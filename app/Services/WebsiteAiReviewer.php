@@ -996,7 +996,7 @@ Group correlated symptoms into one root cause. Duplicate content, clickbait, rep
 Write from detail to synthesis with explicit causal links. key_issues must contain the detailed, numbered root-cause analysis; each item must read as a connected expert observation, not terse dashboard fragments. Use the exact category value supplied by a matching violation_group, or one of the report categories in the schema for a site-wide pattern, so the user can search/filter it in the Findings report. Attach the matching official policy_url copied exactly from adsense_policy_review_matrix. content_overview must describe cross-site content patterns. transparency_overview must directly assess honesty, publisher identity and missing transparency signals. adsense_requirements_overview must compare the site against the supplied AdSense checklist. policy_overview must synthesize detected policy-risk groups. Do not provide remediation steps, action plans, priorities or recommendations anywhere in the assessment.
 After the detailed problems, no_clear_violation_signals must list only important areas for which the scanned evidence found no problem signal, such as prohibited content, graphic violence, hate speech, invalid-click layout, privacy pages or technical access. Never convert an untested area into a clean finding, and phrase each item as "no signal was detected in the scanned data", not guaranteed compliance. conclusion must be the final connected site-wide judgment: overall AdSense risk level, the few findings that drive it, relevant uncertainty/coverage, and the likely review consequence without claiming a guaranteed Google decision. summary is a short lead sentence only; it must not replace the final conclusion.
 For every detected problem discussed in the assessment, add one entry to policy_references. Set section to the exact assessment field where that problem is discussed so the UI can show the link inside the same issue panel. Explain briefly why the official policy is relevant and copy policy_url exactly from the matching adsense_policy_review_matrix entry. Never invent, alter, shorten, or infer a policy URL. Do not add references for areas where no problem signal was detected.
-Use natural, specific and concise {$language}, matching the compact style of an expert web review. Present only the main points. Each key issue should contain no more than two short paragraphs in total across observation and why_it_matters; supporting_evidence should contain 2-4 short items; alternative fields should be one short sentence each. Each overview field and conclusion should be one compact paragraph. Avoid repeating the same fact across fields. Return only JSON matching the schema. Keep key_issues to at most 6, no_clear_violation_signals to at most 5 and limitations to at most 3.
+Use natural, specific and concise {$language}, matching the compact style of an expert web review. Present only the main points. Each key issue should contain no more than two short paragraphs in total across observation and why_it_matters; supporting_evidence should contain 2-4 short items; alternative fields should be one short sentence each. Each overview field and conclusion should be one compact paragraph. Avoid repeating the same fact across fields. Do not output a limitations section. Return only JSON matching the schema. Keep key_issues to at most 6 and no_clear_violation_signals to at most 5.
 PROMPT;
     }
 
@@ -1006,7 +1006,7 @@ PROMPT;
         return [
             'type' => 'object',
             'additionalProperties' => false,
-            'required' => ['risk_level', 'headline', 'summary', 'key_issues', 'content_overview', 'transparency_overview', 'adsense_requirements_overview', 'policy_overview', 'no_clear_violation_signals', 'conclusion', 'policy_references', 'limitations'],
+            'required' => ['risk_level', 'headline', 'summary', 'key_issues', 'content_overview', 'transparency_overview', 'adsense_requirements_overview', 'policy_overview', 'no_clear_violation_signals', 'conclusion', 'policy_references'],
             'properties' => [
                 'risk_level' => ['type' => 'string', 'enum' => ['critical', 'high', 'review', 'healthy']],
                 'headline' => ['type' => 'string'],
@@ -1062,7 +1062,6 @@ PROMPT;
                         ],
                     ],
                 ],
-                'limitations' => ['type' => 'array', 'maxItems' => 3, 'items' => ['type' => 'string']],
             ],
         ];
     }
@@ -1190,7 +1189,6 @@ PROMPT;
             ))), 0, 8),
             'conclusion' => mb_substr(trim((string) ($assessment['conclusion'] ?? $assessment['summary'] ?? '')), 0, 5000),
             'policy_references' => $policyReferences,
-            'limitations' => array_slice(array_values(array_map(fn ($value): string => mb_substr((string) $value, 0, 1000), (array) ($assessment['limitations'] ?? []))), 0, 3),
         ];
     }
 }

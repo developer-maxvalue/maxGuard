@@ -3,7 +3,9 @@
 @section('title', $site['domain'])
 
 @section('content')
-    @php($aiAssessmentBusy = in_array($aiAssessmentStatus, ['queued', 'running', 'retrying'], true))
+    @php
+        $aiAssessmentBusy = in_array($aiAssessmentStatus, ['queued', 'running', 'retrying'], true);
+    @endphp
     <div class="mg-breadcrumb"><a href="{{ route('sites.index') }}">Website</a><i
             class="bi bi-chevron-right"></i><span>{{ $site['domain'] }}</span></div>
     <div class="mg-page-heading align-items-end">
@@ -170,11 +172,28 @@
                                         @endforeach
                                     </div>
                                 @endif
-                                @if (!empty($issue['category']))
+                                @php
+                                    $issueCategory = $issue['category'] ?? null;
+                                    if (!array_key_exists((string) $issueCategory, \App\Support\UiText::findingCategories())) {
+                                        $policyArea = (string) ($issue['policy_area'] ?? '');
+                                        $issueCategory = array_key_exists($policyArea, \App\Support\UiText::findingCategories())
+                                            ? $policyArea
+                                            : match (true) {
+                                                str_contains((string) ($issue['policy_url'] ?? ''), '/11190248') => 'Duplicate content',
+                                                str_contains((string) ($issue['policy_url'] ?? ''), '/81904') => 'Content quality',
+                                                str_contains((string) ($issue['policy_url'] ?? ''), '/11185755') => 'Deceptive practices',
+                                                str_contains((string) ($issue['policy_url'] ?? ''), '/1348695') => 'Privacy & consent',
+                                                str_contains((string) ($issue['policy_url'] ?? ''), '/1346295') => 'Ad experience',
+                                                str_contains((string) ($issue['policy_url'] ?? ''), '/2381908') => 'Technical trust',
+                                                default => null,
+                                            };
+                                    }
+                                @endphp
+                                @if ($issueCategory)
                                     <div class="fs-9 text-muted mt-2">
                                         <span>Danh mục:</span>
-                                        <a href="{{ route('sites.show', $site['slug']) }}?finding_category={{ urlencode($issue['category']) }}#finding-report-filter">
-                                            {{ \App\Support\UiText::label($issue['category']) }}
+                                        <a href="{{ route('sites.show', $site['slug']) }}?finding_category={{ urlencode($issueCategory) }}#finding-report-filter">
+                                            {{ \App\Support\UiText::label($issueCategory) }}
                                         </a>
                                     </div>
                                 @endif
@@ -236,12 +255,6 @@
                     <div class="border border-primary rounded p-4 mb-5 bg-light-primary">
                         <strong class="d-block mb-2">Kết luận tổng hợp</strong>
                         <p class="mb-0 text-gray-800">{{ $aiAssessment['conclusion'] ?? $aiAssessment['summary'] }}</p>
-                    </div>
-                @endif
-
-                @if (!empty($aiAssessment['limitations']))
-                    <div class="alert alert-light mt-5 mb-0"><strong>Giới hạn đánh giá:</strong>
-                        {{ implode(' ', $aiAssessment['limitations']) }}
                     </div>
                 @endif
 
