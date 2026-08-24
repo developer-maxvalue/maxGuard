@@ -3,6 +3,7 @@
 @section('title', $site['domain'])
 
 @section('content')
+    @php($aiAssessmentBusy = in_array($aiAssessmentStatus, ['queued', 'running', 'retrying'], true))
     <div class="mg-breadcrumb"><a href="{{ route('sites.index') }}">Website</a><i
             class="bi bi-chevron-right"></i><span>{{ $site['domain'] }}</span></div>
     <div class="mg-page-heading align-items-end">
@@ -31,9 +32,13 @@
         <div class="d-flex gap-3">
             <form method="POST" action="{{ route('sites.ai-assessment', $site['slug']) }}">
                 @csrf
-                <button class="btn btn-light-primary" @disabled(!$aiReady || !$aiAssessmentScan)
+                <button class="btn btn-light-primary" @disabled(!$aiReady || !$aiAssessmentScan || $aiAssessmentBusy)
                     title="{{ !$aiReady ? 'AI chưa được cấu hình' : (!$aiAssessmentScan ? 'Cần quét website trước' : 'Đọc lại toàn bộ chỉ số và vấn đề của lượt quét gần nhất') }}">
-                    <i class="bi bi-stars me-2"></i>{{ $aiAssessment ? 'AI đánh giá lại' : 'AI đánh giá' }}
+                    @if ($aiAssessmentBusy)
+                        <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>AI đang xử lý
+                    @else
+                        <i class="bi bi-stars me-2"></i>{{ $aiAssessment ? 'AI đánh giá lại' : 'AI đánh giá' }}
+                    @endif
                 </button>
             </form>
             <form method="POST" action="{{ route('scans.store') }}">
@@ -79,7 +84,8 @@
         </div>
     @endif
 
-    <div class="card mg-card mb-5">
+    <div class="card mg-card mb-5" id="ai-assessment-card"
+        @if ($aiAssessmentScan) data-status="{{ $aiAssessmentStatus }}" data-endpoint="{{ route('scans.targets.live', $aiAssessmentScan) }}" @endif>
         <div class="card-header border-0 pt-2">
             <div class="card-title d-block">
                 <h2 class="mg-card-title">Phân tích tình trạng chính sách</h2>
@@ -87,6 +93,17 @@
             </div>
         </div>
         <div class="card-body pt-1">
+            @if ($aiAssessmentBusy)
+                <div class="alert alert-primary d-flex align-items-center gap-3">
+                    <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                    <div><strong>Đánh giá AI đang được xử lý trong hàng đợi.</strong> Trang sẽ tự cập nhật khi hoàn tất.</div>
+                </div>
+            @elseif ($aiAssessmentStatus === 'failed')
+                <div class="alert alert-danger">
+                    <strong class="d-block mb-1">Đánh giá AI thất bại sau các lần thử lại.</strong>
+                    {{ $aiAssessmentError ?: 'Không có thông tin lỗi từ nhà cung cấp AI.' }}
+                </div>
+            @endif
             <div class="row g-4">
                 @foreach ($site['policies'] as $policy)
                     <div class="col-md-6 col-xxl-3">
@@ -178,7 +195,7 @@
                     <p class="mt-3 mb-4 text-muted">
                         {{ $aiAssessmentScan ? 'Chưa có nhận định AI cho lượt quét gần nhất.' : 'Hãy quét website trước để AI có dữ liệu đánh giá.' }}
                     </p>
-                    @if ($aiReady && $aiAssessmentScan)
+                    @if ($aiReady && $aiAssessmentScan && !$aiAssessmentBusy)
                         <form method="POST" action="{{ route('sites.ai-assessment', $site['slug']) }}">@csrf
                             <button class="btn btn-primary"><i class="bi bi-stars me-2"></i>Đánh giá bằng AI</button>
                         </form>
@@ -435,6 +452,30 @@
                 const page = trigger.dataset.page || new URL(trigger.href).searchParams.get('findings_page') || 1;
                 loadFindings(Number(page));
             });
+        });
+    </script>
+@endpush
+
+@push('page-scripts')
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const card = document.getElementById('ai-assessment-card');
+            if (!card?.dataset.endpoint || !['queued', 'running', 'retrying'].includes(card.dataset.status)) return;
+
+            const poll = window.setInterval(async () => {
+                try {
+                    const response = await fetch(card.dataset.endpoint, {headers: {'Accept': 'application/json'}});
+                    if (!response.ok) return;
+                    const payload = await response.json();
+                    const status = payload.scan?.ai_assessment_status || '';
+                    if (['completed', 'failed'].includes(status)) {
+                        window.clearInterval(poll);
+                        window.location.reload();
+                    }
+                } catch (error) {
+                    // A later poll can recover from a transient network error.
+                }
+            }, 5000);
         });
     </script>
 @endpush

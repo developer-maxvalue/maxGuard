@@ -2,12 +2,14 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\GenerateWebsiteAiAssessment;
 use App\Models\Finding;
 use App\Models\Scan;
 use App\Models\User;
 use App\Models\Website;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 final class WebsiteAiAssessmentTest extends TestCase
@@ -16,6 +18,7 @@ final class WebsiteAiAssessmentTest extends TestCase
 
     public function test_owner_can_generate_and_view_an_ai_assessment_from_latest_scan_data(): void
     {
+        Queue::fake();
         config()->set([
             'maxguard.ai.enabled' => true,
             'maxguard.ai.provider' => 'openai_compatible',
@@ -97,11 +100,29 @@ final class WebsiteAiAssessmentTest extends TestCase
         $this->actingAs($owner)
             ->post(route('sites.ai-assessment', $website))
             ->assertRedirect()
-            ->assertSessionHasNoErrors();
+            ->assertSessionHasNoErrors()
+            ->assertSessionHas('status', 'Đã đưa yêu cầu đánh giá AI vào hàng đợi. Bạn có thể rời trang này trong khi hệ thống xử lý.');
+
+        Queue::assertPushed(GenerateWebsiteAiAssessment::class, fn (GenerateWebsiteAiAssessment $job): bool => $job->scanId === $scan->id
+            && $job->queue === config('maxguard.ai_assessment_queue', config('maxguard.finalize_queue', 'scan-finalize')));
+
+        $scan->refresh();
+        $this->assertSame('queued', data_get($scan->meta, 'ai_assessment_status'));
+        $this->assertNull($scan->ai_assessment);
+        $this->actingAs($owner)
+            ->get(route('sites.show', $website))
+            ->assertOk()
+            ->assertSee('Đánh giá AI đang được xử lý trong hàng đợi.');
+
+        (new GenerateWebsiteAiAssessment($scan->id))->handle(
+            app(\App\Services\AiConfiguration::class),
+            app(\App\Services\WebsiteAiReviewer::class),
+        );
 
         $scan->refresh();
         $this->assertSame('high', data_get($scan->ai_assessment, 'risk_level'));
         $this->assertNotNull($scan->ai_assessed_at);
+        $this->assertSame('completed', data_get($scan->meta, 'ai_assessment_status'));
 
         $this->actingAs($owner)
             ->get(route('sites.show', $website))

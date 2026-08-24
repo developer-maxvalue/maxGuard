@@ -1271,15 +1271,9 @@ final class ScanRunner
         }
 
         try {
-            app(WebsiteAiReviewer::class)->reviewAndStore($scan);
+            app(WebsiteAiAssessmentDispatcher::class)->dispatch($scan, 'automatic');
         } catch (Throwable $exception) {
             report($exception);
-            $scan->update([
-                'meta' => array_merge((array) $scan->meta, [
-                    'ai_assessment_error' => mb_substr($exception->getMessage(), 0, 1000),
-                    'ai_assessment_failed_at' => now()->toIso8601String(),
-                ]),
-            ]);
         }
     }
 

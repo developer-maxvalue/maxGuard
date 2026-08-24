@@ -140,6 +140,9 @@ final class ScanController extends Controller
                 'pages_scanned' => $scan->pages_scanned,
                 'pages_discovered' => $scan->pages_discovered,
                 'current_url' => $scan->current_url,
+                'ai_assessment_status' => (string) data_get($scan->meta, 'ai_assessment_status', $scan->ai_assessment ? 'completed' : ''),
+                'ai_assessment_error' => (string) data_get($scan->meta, 'ai_assessment_error', ''),
+                'ai_assessed_at' => $scan->ai_assessed_at?->toIso8601String(),
             ],
             'targets' => $scan->targets()->orderBy('position')->get()->map(fn (ScanTarget $target): array => [
                 'id' => $target->id,
@@ -279,6 +282,7 @@ final class ScanController extends Controller
             'ai_findings_count' => $scan->ai_findings_count,
             'ai_limit_reached' => (bool) data_get($scan->meta, 'ai_limit_reached', false),
             'ai_errors' => (int) data_get($scan->meta, 'ai_errors', 0),
+            'ai_assessment_status' => (string) data_get($scan->meta, 'ai_assessment_status', $scan->ai_assessment ? 'completed' : ''),
             'is_sampled' => (bool) data_get($scan->meta, 'is_sampled', false),
             'sampling_mode' => (string) data_get($scan->meta, 'sampling_mode', 'all_urls'),
             'available_urls' => (int) data_get($scan->meta, 'available_urls', $scan->pages_discovered),

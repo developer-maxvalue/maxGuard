@@ -8,7 +8,7 @@ use App\Models\Website;
 use App\Services\AiConfiguration;
 use App\Services\ScanDispatcher;
 use App\Services\UrlNormalizer;
-use App\Services\WebsiteAiReviewer;
+use App\Services\WebsiteAiAssessmentDispatcher;
 use App\Support\GooglePolicyReference;
 use App\Support\UiText;
 use Illuminate\Database\Eloquent\Builder;
@@ -187,6 +187,8 @@ final class SiteController extends Controller
             'aiPolicyReferences' => $aiPolicyReferences,
             'aiAssessedAt' => $latestScan?->ai_assessed_at,
             'aiAssessmentScan' => $latestScan,
+            'aiAssessmentStatus' => (string) data_get($latestScan?->meta, 'ai_assessment_status', $latestScan?->ai_assessment ? 'completed' : ''),
+            'aiAssessmentError' => (string) data_get($latestScan?->meta, 'ai_assessment_error', ''),
             'findingReport' => $findingReport,
             'findingCategories' => $findingCategories,
             'activeScan' => $activeScan,
@@ -234,7 +236,7 @@ final class SiteController extends Controller
         ]);
     }
 
-    public function assess(Website $site, AiConfiguration $configuration, WebsiteAiReviewer $reviewer): RedirectResponse
+    public function assess(Website $site, AiConfiguration $configuration, WebsiteAiAssessmentDispatcher $dispatcher): RedirectResponse
     {
         $this->authorizeOwner($site);
 
@@ -251,14 +253,16 @@ final class SiteController extends Controller
         }
 
         try {
-            $reviewer->reviewAndStore($scan);
+            $queued = $dispatcher->dispatch($scan, 'manual');
         } catch (\Throwable $exception) {
             report($exception);
 
-            return back()->withErrors(['ai' => 'Không thể hoàn tất đánh giá AI: '.mb_substr($exception->getMessage(), 0, 300)]);
+            return back()->withErrors(['ai' => 'Không thể đưa đánh giá AI vào hàng đợi: '.mb_substr($exception->getMessage(), 0, 300)]);
         }
 
-        return back()->with('status', 'AI đã đánh giá lại website theo dữ liệu của lượt quét gần nhất.');
+        return back()->with('status', $queued
+            ? 'Đã đưa yêu cầu đánh giá AI vào hàng đợi. Bạn có thể rời trang này trong khi hệ thống xử lý.'
+            : 'Đánh giá AI của lượt quét này đang ở trong hàng đợi hoặc đang xử lý.');
     }
 
     public function destroy(Website $site): RedirectResponse

@@ -33,6 +33,7 @@ return [
     'queue' => env('MAXGUARD_QUEUE', 'scans'),
     'page_queue' => env('MAXGUARD_PAGE_QUEUE', 'scan-pages'),
     'finalize_queue' => env('MAXGUARD_FINALIZE_QUEUE', 'scan-finalize'),
+    'ai_assessment_queue' => env('MAXGUARD_AI_ASSESSMENT_QUEUE', env('MAXGUARD_FINALIZE_QUEUE', 'scan-finalize')),
     'orchestrator_timeout_seconds' => (int) env('MAXGUARD_ORCHESTRATOR_TIMEOUT', 900),
     'page_job_timeout_seconds' => (int) env('MAXGUARD_PAGE_JOB_TIMEOUT', 1800),
     'finalize_timeout_seconds' => (int) env('MAXGUARD_FINALIZE_TIMEOUT', 900),
