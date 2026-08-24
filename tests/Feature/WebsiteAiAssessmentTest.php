@@ -48,6 +48,11 @@ final class WebsiteAiAssessmentTest extends TestCase
                         'issue' => 'Nội dung trùng lặp',
                         'relevance' => 'Nội dung sao chép cần có giá trị gia tăng độc lập.',
                         'policy_url' => 'https://support.google.com/publisherpolicies/answer/11190248?hl=vi',
+                    ], [
+                        'section' => 'policy_overview',
+                        'issue' => 'Mật độ quảng cáo cao',
+                        'relevance' => 'Quảng cáo không được bố trí theo cách gây nhấp nhầm hoặc lấn át nội dung.',
+                        'policy_url' => 'https://support.google.com/adsense/answer/1346295?hl=vi',
                     ]],
                     'key_issues' => [[
                         'title' => 'Mật độ quảng cáo cao',
@@ -57,9 +62,7 @@ final class WebsiteAiAssessmentTest extends TestCase
                         'evidence' => 'Finding MG-TEST có confidence 91%.',
                         'example_urls' => ['https://publisher.example/article-with-too-many-ads'],
                         'policy_url' => 'https://support.google.com/adsense/answer/1346295?hl=vi',
-                        'recommendation' => 'Giảm số vị trí quảng cáo và quét lại.',
                     ]],
-                    'priorities' => ['Xử lý finding mức cao trước.'],
                     'limitations' => ['Lượt quét chỉ bao phủ 80% URL phát hiện.'],
                 ], JSON_UNESCAPED_UNICODE)]]],
             ]),
@@ -159,8 +162,9 @@ final class WebsiteAiAssessmentTest extends TestCase
                 'Các dấu hiệu rủi ro đáng chú ý',
                 'Điều không thấy vi phạm rõ ràng',
                 'Kết luận tổng hợp',
-                'Thứ tự xử lý đề xuất',
             ])
+            ->assertDontSee('Hướng xử lý:')
+            ->assertDontSee('Thứ tự xử lý đề xuất')
             ->assertSeeInOrder([
                 'Tổng quan nội dung và cấu trúc',
                 'https://support.google.com/publisherpolicies/answer/11190248?hl=vi',

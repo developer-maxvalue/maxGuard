@@ -54,7 +54,6 @@ final class WebsiteAiReviewerPatternTest extends TestCase
             'risk_level' => 'healthy',
             'content_overview' => 'Tổng quan ban đầu.',
             'key_issues' => [],
-            'priorities' => [],
             'policy_references' => [],
         ], [
             'whole_site_page_profile' => ['content_pattern_evidence' => $assessmentEvidence],
@@ -67,7 +66,6 @@ final class WebsiteAiReviewerPatternTest extends TestCase
         $this->assertStringContainsString('scaled/low-value content', $assessment['content_overview']);
         $this->assertStringContainsString('tuyên bố tuyệt đối', $assessment['transparency_overview']);
         $this->assertStringContainsString('mô hình nội dung sản xuất hàng loạt', mb_strtolower($assessment['policy_overview']));
-        $this->assertNotEmpty($assessment['priorities']);
         $scaledIssue = collect($assessment['key_issues'])->firstWhere('title', 'Mô hình nội dung sản xuất hàng loạt cần được xem xét');
         $this->assertSame('Content quality', $scaledIssue['category']);
         $this->assertCount(2, $scaledIssue['example_urls']);

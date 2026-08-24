@@ -178,16 +178,6 @@
                                         </a>
                                     </p>
                                 @endif
-                                @if (!empty($issue['policy_url']))
-                                    <p class="mb-2"><strong>Chính sách Google liên quan:</strong>
-                                        <a href="{{ $issue['policy_url'] }}" target="_blank" rel="noopener noreferrer">
-                                            Xem tài liệu chính thức <i class="bi bi-box-arrow-up-right ms-1"></i>
-                                        </a>
-                                    </p>
-                                @endif
-                                @if (!empty($issue['recommendation']))
-                                    <p class="mb-0 text-gray-700"><strong>Hướng xử lý:</strong> {{ $issue['recommendation'] }}</p>
-                                @endif
                             </div>
                         @endforeach
                     </div>
@@ -240,14 +230,6 @@
                     </div>
                 @endif
 
-                @if (!empty($aiAssessment['priorities']))
-                    <h3 class="fs-6 mb-3">Thứ tự xử lý đề xuất</h3>
-                    <ol class="mb-0 ps-5">
-                        @foreach ($aiAssessment['priorities'] as $priority)
-                            <li class="mb-2">{{ $priority }}</li>
-                        @endforeach
-                    </ol>
-                @endif
                 @if (!empty($aiAssessment['limitations']))
                     <div class="alert alert-light mt-5 mb-0"><strong>Giới hạn đánh giá:</strong>
                         {{ implode(' ', $aiAssessment['limitations']) }}
