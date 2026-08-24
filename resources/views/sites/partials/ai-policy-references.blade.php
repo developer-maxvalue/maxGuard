@@ -1,9 +1,11 @@
 @php
-    $sectionReferences = $aiPolicyReferences->where('section', $section)->values();
+    $sectionReferences = $section === null
+        ? $aiPolicyReferences->unique(fn ($reference) => ($reference['issue'] ?? '').'|'.($reference['policy_url'] ?? ''))->values()
+        : $aiPolicyReferences->where('section', $section)->values();
 @endphp
 
 @if ($sectionReferences->isNotEmpty())
-    <div class="mt-3 pt-3 border-top">
+    <div class="border rounded p-4 mb-4">
         <span class="d-block text-muted fs-9 fw-semibold mb-2">Chính sách AdSense/Google liên quan</span>
         <div class="d-flex flex-column gap-2">
             @foreach ($sectionReferences as $reference)

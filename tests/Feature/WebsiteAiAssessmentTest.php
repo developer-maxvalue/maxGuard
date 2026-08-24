@@ -160,15 +160,13 @@ final class WebsiteAiAssessmentTest extends TestCase
             ->get(route('sites.show', $website))
             ->assertOk()
             ->assertSee('Nhận định tổng hợp từ AI')
-            ->assertSee('Tính trung thực và minh bạch của nhà xuất bản')
-            ->assertSee('Đối chiếu yêu cầu AdSense')
             ->assertSee('Chính sách AdSense/Google liên quan')
             ->assertSee('URL ví dụ:')
             ->assertSee('https://publisher.example/article-with-too-many-ads', false)
-            ->assertSee('Ad experience')
-            ->assertSee('Root cause:')
-            ->assertSee('Alternative explanation:')
-            ->assertSee('Manual verification:')
+            ->assertSee('Danh mục:')
+            ->assertSee('Trải nghiệm quảng cáo')
+            ->assertDontSee('Danh mục trong Báo cáo phát hiện:')
+            ->assertSee('Độ chắc chắn và cách giải thích khác')
             ->assertSee('https://support.google.com/adsense/answer/1346295?hl=vi', false)
             ->assertSeeInOrder([
                 'Các dấu hiệu rủi ro đáng chú ý',
@@ -178,9 +176,9 @@ final class WebsiteAiAssessmentTest extends TestCase
             ->assertDontSee('Hướng xử lý:')
             ->assertDontSee('Thứ tự xử lý đề xuất')
             ->assertSeeInOrder([
-                'Tổng quan nội dung và cấu trúc',
+                'Chính sách AdSense/Google liên quan',
                 'https://support.google.com/publisherpolicies/answer/11190248?hl=vi',
-                'Tính trung thực và minh bạch của nhà xuất bản',
+                'Điều không thấy vi phạm rõ ràng',
             ], false);
 
         Http::assertSent(function ($request): bool {
