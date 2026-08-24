@@ -60,7 +60,7 @@ final class ScanDispatcher
                 'max_urls' => $maxUrls,
                 'use_ai' => $useAi,
                 'force_rescan' => $forceRescan,
-                'ruleset_version' => '1.4.0',
+                'ruleset_version' => '1.5.0',
             ]);
 
             $locked->update(['status' => 'scanning']);
