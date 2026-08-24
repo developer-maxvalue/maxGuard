@@ -7,6 +7,7 @@ use App\Support\AnthropicJsonSchema;
 use App\Support\EssentialPublisherPages;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 use Throwable;
 
@@ -879,16 +880,25 @@ SQL)->first();
         if ($provider === 'gemini' && ! str_starts_with(strtolower($model), 'gpt-')) {
             $url = rtrim((string) config('maxguard.ai.gemini_base_url', $baseUrl), '/')
                 .'/models/'.rawurlencode($model).':generateContent?key='.rawurlencode((string) config('maxguard.ai.api_key'));
-            $response = $request->post($url, [
+            $geminiPayload = [
                 'systemInstruction' => ['parts' => [['text' => $system]]],
                 'contents' => [['role' => 'user', 'parts' => [['text' => $user]]]],
                 'generationConfig' => [
                     'responseMimeType' => 'application/json',
-                    'responseJsonSchema' => $this->schema(),
+                    'responseJsonSchema' => $this->geminiSchema(),
                     'maxOutputTokens' => max(1200, (int) config('maxguard.ai.max_output_tokens', 3000)),
                     'temperature' => 0.1,
                 ],
-            ]);
+            ];
+            $response = $request->post($url, $geminiPayload);
+            if ($response->status() === 400 && str_contains($response->body(), 'INVALID_ARGUMENT')) {
+                Log::warning('Gemini rejected the website assessment response schema; retrying in JSON mode.', [
+                    'model' => $model,
+                    'status' => $response->status(),
+                ]);
+                unset($geminiPayload['generationConfig']['responseJsonSchema']);
+                $response = $request->post($url, $geminiPayload);
+            }
             $text = $response->successful() ? data_get($response->json(), 'candidates.0.content.parts.0.text') : null;
         } elseif ($provider === 'anthropic') {
             $response = $request->post($baseUrl.'/messages', [
@@ -997,6 +1007,7 @@ Write from detail to synthesis with explicit causal links. key_issues must conta
 After the detailed problems, no_clear_violation_signals must list only important areas for which the scanned evidence found no problem signal, such as prohibited content, graphic violence, hate speech, invalid-click layout, privacy pages or technical access. Never convert an untested area into a clean finding, and phrase each item as "no signal was detected in the scanned data", not guaranteed compliance. conclusion must be the final connected site-wide judgment: overall AdSense risk level, the few findings that drive it, relevant uncertainty/coverage, and the likely review consequence without claiming a guaranteed Google decision. summary is a short lead sentence only; it must not replace the final conclusion.
 For every detected problem discussed in the assessment, add one entry to policy_references. Set section to the exact assessment field where that problem is discussed so the UI can show the link inside the same issue panel. Explain briefly why the official policy is relevant and copy policy_url exactly from the matching adsense_policy_review_matrix entry. Never invent, alter, shorten, or infer a policy URL. Do not add references for areas where no problem signal was detected.
 Use natural, specific and concise {$language}, matching the compact style of an expert web review. Present only the main points. Each key issue should contain no more than two short paragraphs in total across observation and why_it_matters; supporting_evidence should contain 2-4 short items; alternative fields should be one short sentence each. Each overview field and conclusion should be one compact paragraph. Avoid repeating the same fact across fields. Do not output a limitations section. Return only JSON matching the schema. Keep key_issues to at most 6 and no_clear_violation_signals to at most 5.
+Each key_issues object must use these exact keys: title, root_cause, severity, category, observation, risk_signal, why_it_matters, evidence, supporting_evidence, policy_area, confidence, manual_verification, alternative_explanation, alternative_assessment, example_urls, policy_url. Each policy_references object must use: section, issue, relevance, policy_url.
 PROMPT;
     }
 
@@ -1056,6 +1067,66 @@ PROMPT;
                                 'type' => 'string',
                                 'enum' => ['content_overview', 'transparency_overview', 'adsense_requirements_overview', 'policy_overview'],
                             ],
+                            'issue' => ['type' => 'string'],
+                            'relevance' => ['type' => 'string'],
+                            'policy_url' => ['type' => 'string'],
+                        ],
+                    ],
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * Gemini rejects very large/deep response schemas before generation. Keep
+     * only the stable top-level contract here; application normalization still
+     * validates and bounds every nested issue returned by the model.
+     *
+     * @return array<string, mixed>
+     */
+    private function geminiSchema(): array
+    {
+        return [
+            'type' => 'object',
+            'additionalProperties' => false,
+            'required' => ['risk_level', 'headline', 'summary', 'key_issues', 'content_overview', 'transparency_overview', 'adsense_requirements_overview', 'policy_overview', 'no_clear_violation_signals', 'conclusion', 'policy_references'],
+            'properties' => [
+                'risk_level' => ['type' => 'string', 'enum' => ['critical', 'high', 'review', 'healthy']],
+                'headline' => ['type' => 'string'],
+                'summary' => ['type' => 'string'],
+                'key_issues' => [
+                    'type' => 'array',
+                    'maxItems' => 6,
+                    'items' => [
+                        'type' => 'object',
+                        'additionalProperties' => true,
+                        'required' => ['title', 'severity', 'category', 'observation', 'why_it_matters', 'example_urls', 'policy_url'],
+                        'properties' => [
+                            'title' => ['type' => 'string'],
+                            'severity' => ['type' => 'string', 'enum' => ['critical', 'high', 'review', 'info']],
+                            'category' => ['type' => 'string'],
+                            'observation' => ['type' => 'string'],
+                            'why_it_matters' => ['type' => 'string'],
+                            'example_urls' => ['type' => 'array', 'maxItems' => 2, 'items' => ['type' => 'string']],
+                            'policy_url' => ['type' => 'string'],
+                        ],
+                    ],
+                ],
+                'content_overview' => ['type' => 'string'],
+                'transparency_overview' => ['type' => 'string'],
+                'adsense_requirements_overview' => ['type' => 'string'],
+                'policy_overview' => ['type' => 'string'],
+                'no_clear_violation_signals' => ['type' => 'array', 'maxItems' => 5, 'items' => ['type' => 'string']],
+                'conclusion' => ['type' => 'string'],
+                'policy_references' => [
+                    'type' => 'array',
+                    'maxItems' => 8,
+                    'items' => [
+                        'type' => 'object',
+                        'additionalProperties' => false,
+                        'required' => ['section', 'issue', 'relevance', 'policy_url'],
+                        'properties' => [
+                            'section' => ['type' => 'string'],
                             'issue' => ['type' => 'string'],
                             'relevance' => ['type' => 'string'],
                             'policy_url' => ['type' => 'string'],

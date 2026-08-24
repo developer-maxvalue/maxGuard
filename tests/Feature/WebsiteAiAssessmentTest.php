@@ -196,7 +196,7 @@ final class WebsiteAiAssessmentTest extends TestCase
         });
     }
 
-    public function test_gemini_uses_query_api_key_without_a_bearer_header(): void
+    public function test_gemini_uses_a_compact_schema_and_falls_back_to_json_mode(): void
     {
         config()->set([
             'maxguard.ai.enabled' => true,
@@ -207,19 +207,19 @@ final class WebsiteAiAssessmentTest extends TestCase
             'maxguard.ai.model' => 'gemini-test-model',
             'maxguard.ai.output_language' => 'Vietnamese',
         ]);
-        Http::fake([
-            '*' => Http::response([
+        Http::fakeSequence()
+            ->push([
+                'error' => ['code' => 400, 'message' => 'Request contains an invalid argument.', 'status' => 'INVALID_ARGUMENT'],
+            ], 400)
+            ->push([
                 'responseId' => 'gemini-review-1',
                 'candidates' => [['content' => ['parts' => [['text' => json_encode([
                     'risk_level' => 'healthy',
                     'headline' => 'Không có vấn đề nghiêm trọng',
                     'summary' => 'Dữ liệu hiện tại chưa ghi nhận finding đang mở.',
                     'key_issues' => [],
-                    'priorities' => [],
-                    'limitations' => [],
                 ], JSON_UNESCAPED_UNICODE)]]]]],
-            ]),
-        ]);
+            ], 200);
 
         $owner = User::factory()->create();
         $website = Website::query()->create([
@@ -244,11 +244,21 @@ final class WebsiteAiAssessmentTest extends TestCase
 
         app(\App\Services\WebsiteAiReviewer::class)->reviewAndStore($scan);
 
+        Http::assertSentCount(2);
         Http::assertSent(function ($request): bool {
             parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
 
             return ($query['key'] ?? null) === 'gemini-test-key'
-                && ! $request->hasHeader('Authorization');
+                && ! $request->hasHeader('Authorization')
+                && data_get($request->data(), 'generationConfig.responseJsonSchema.properties.key_issues.items.additionalProperties') === true;
+        });
+        Http::assertSent(function ($request): bool {
+            parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+
+            return ($query['key'] ?? null) === 'gemini-test-key'
+                && ! $request->hasHeader('Authorization')
+                && data_get($request->data(), 'generationConfig.responseMimeType') === 'application/json'
+                && data_get($request->data(), 'generationConfig.responseJsonSchema') === null;
         });
     }
 
