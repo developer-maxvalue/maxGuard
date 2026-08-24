@@ -140,11 +140,58 @@
             @if ($aiAssessment)
                 <div class="d-flex align-items-start justify-content-between gap-4 flex-wrap mb-5">
                     <div>
-                        <h3 class="fs-4 mb-2">{{ $aiAssessment['headline'] ?? 'Đánh giá tình trạng website' }}</h3>
-                        <p class="text-gray-700 mb-0">{{ $aiAssessment['summary'] ?? '' }}</p>
+                        <h3 class="fs-4 mb-0">{{ $aiAssessment['headline'] ?? 'Đánh giá tình trạng website' }}</h3>
                     </div>
                     <x-status-badge :status="$aiAssessment['risk_level'] ?? $site['status']" />
                 </div>
+
+                @if (!empty($aiAssessment['key_issues']))
+                    <h3 class="fs-5 mb-4">Các dấu hiệu rủi ro đáng chú ý</h3>
+                    <div class="d-flex flex-column gap-4 mb-5">
+                        @foreach ($aiAssessment['key_issues'] as $index => $issue)
+                            <div class="border rounded p-4">
+                                <div class="d-flex align-items-start justify-content-between gap-3 mb-3">
+                                    <strong class="fs-6">{{ $index + 1 }}. {{ $issue['title'] ?? 'Vấn đề cần xem xét' }}</strong>
+                                    <x-status-badge :status="$issue['severity'] ?? 'review'" />
+                                </div>
+                                @if (!empty($issue['evidence']))
+                                    <p class="text-gray-700 mb-2"><strong>Dấu hiệu quan sát được:</strong> {{ $issue['evidence'] }}</p>
+                                @endif
+                                @if (!empty($issue['why_it_matters']))
+                                    <p class="text-gray-700 mb-2"><strong>Nhận định và tác động:</strong> {{ $issue['why_it_matters'] }}</p>
+                                @endif
+                                @if (!empty($issue['example_urls']))
+                                    <div class="mb-2">
+                                        <strong class="d-block mb-1">URL ví dụ:</strong>
+                                        @foreach (array_slice((array) $issue['example_urls'], 0, 2) as $exampleUrl)
+                                            <a class="d-block text-break" href="{{ $exampleUrl }}" target="_blank" rel="noopener noreferrer">
+                                                {{ $exampleUrl }} <i class="bi bi-box-arrow-up-right ms-1"></i>
+                                            </a>
+                                        @endforeach
+                                    </div>
+                                @endif
+                                @if (!empty($issue['category']))
+                                    <p class="mb-2">
+                                        <strong>Danh mục trong Báo cáo phát hiện:</strong>
+                                        <a href="{{ route('sites.show', $site['slug']) }}?finding_category={{ urlencode($issue['category']) }}#finding-report-filter">
+                                            {{ \App\Support\UiText::label($issue['category']) }} ({{ $issue['category'] }})
+                                        </a>
+                                    </p>
+                                @endif
+                                @if (!empty($issue['policy_url']))
+                                    <p class="mb-2"><strong>Chính sách Google liên quan:</strong>
+                                        <a href="{{ $issue['policy_url'] }}" target="_blank" rel="noopener noreferrer">
+                                            Xem tài liệu chính thức <i class="bi bi-box-arrow-up-right ms-1"></i>
+                                        </a>
+                                    </p>
+                                @endif
+                                @if (!empty($issue['recommendation']))
+                                    <p class="mb-0 text-gray-700"><strong>Hướng xử lý:</strong> {{ $issue['recommendation'] }}</p>
+                                @endif
+                            </div>
+                        @endforeach
+                    </div>
+                @endif
 
                 @if (!empty($aiAssessment['content_overview']))
                     <div class="border rounded p-4 mb-4">
@@ -168,10 +215,28 @@
                     </div>
                 @endif
                 @if (!empty($aiAssessment['policy_overview']))
-                    <div class="border rounded p-4 mb-5">
+                    <div class="border rounded p-4 mb-4">
                         <strong class="d-block mb-2">Tổng quan tình trạng chính sách</strong>
                         <p class="mb-0 text-gray-700">{{ $aiAssessment['policy_overview'] }}</p>
                         @include('sites.partials.ai-policy-references', ['section' => 'policy_overview'])
+                    </div>
+                @endif
+
+                @if (!empty($aiAssessment['no_clear_violation_signals']))
+                    <div class="border rounded p-4 mb-4">
+                        <strong class="d-block mb-2">Điều không thấy vi phạm rõ ràng</strong>
+                        <ul class="mb-0 ps-5 text-gray-700">
+                            @foreach ($aiAssessment['no_clear_violation_signals'] as $signal)
+                                <li class="mb-2">{{ $signal }}</li>
+                            @endforeach
+                        </ul>
+                    </div>
+                @endif
+
+                @if (!empty($aiAssessment['conclusion']) || !empty($aiAssessment['summary']))
+                    <div class="border border-primary rounded p-4 mb-5 bg-light-primary">
+                        <strong class="d-block mb-2">Kết luận tổng hợp</strong>
+                        <p class="mb-0 text-gray-800">{{ $aiAssessment['conclusion'] ?? $aiAssessment['summary'] }}</p>
                     </div>
                 @endif
 

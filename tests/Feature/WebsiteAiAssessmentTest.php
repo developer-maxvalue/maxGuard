@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Jobs\GenerateWebsiteAiAssessment;
 use App\Models\Finding;
+use App\Models\Page;
 use App\Models\Scan;
 use App\Models\User;
 use App\Models\Website;
@@ -38,6 +39,10 @@ final class WebsiteAiAssessmentTest extends TestCase
                     'transparency_overview' => 'Chưa đủ tín hiệu về danh tính và tính minh bạch của nhà xuất bản.',
                     'adsense_requirements_overview' => 'Cần hoàn thiện disclosure quyền riêng tư theo yêu cầu AdSense.',
                     'policy_overview' => 'Dữ liệu quét ghi nhận rủi ro chính sách cần xử lý.',
+                    'no_clear_violation_signals' => [
+                        'Không phát hiện tín hiệu nội dung bị cấm trong dữ liệu đã quét.',
+                    ],
+                    'conclusion' => 'Xét toàn website, rủi ro AdSense ở mức cao và chủ yếu đến từ mật độ quảng cáo.',
                     'policy_references' => [[
                         'section' => 'content_overview',
                         'issue' => 'Nội dung trùng lặp',
@@ -47,8 +52,11 @@ final class WebsiteAiAssessmentTest extends TestCase
                     'key_issues' => [[
                         'title' => 'Mật độ quảng cáo cao',
                         'severity' => 'high',
+                        'category' => 'Ad experience',
                         'why_it_matters' => 'Có thể làm giảm giá trị nội dung và gây nhấp nhầm.',
                         'evidence' => 'Finding MG-TEST có confidence 91%.',
+                        'example_urls' => ['https://publisher.example/article-with-too-many-ads'],
+                        'policy_url' => 'https://support.google.com/adsense/answer/1346295?hl=vi',
                         'recommendation' => 'Giảm số vị trí quảng cáo và quét lại.',
                     ]],
                     'priorities' => ['Xử lý finding mức cao trước.'],
@@ -81,10 +89,22 @@ final class WebsiteAiAssessmentTest extends TestCase
             'score' => 72,
             'finished_at' => now(),
         ]);
+        $page = Page::query()->create([
+            'website_id' => $website->id,
+            'last_scan_id' => $scan->id,
+            'url' => 'https://publisher.example/article-with-too-many-ads',
+            'url_hash' => hash('sha256', 'https://publisher.example/article-with-too-many-ads'),
+            'status_code' => 200,
+            'title' => 'Article with too many ads',
+            'word_count' => 500,
+            'ad_count' => 8,
+            'last_scanned_at' => now(),
+        ]);
         Finding::query()->create([
             'public_id' => 'MG-TEST',
             'website_id' => $website->id,
             'scan_id' => $scan->id,
+            'page_id' => $page->id,
             'fingerprint' => hash('sha256', 'ads.test'),
             'rule_key' => 'ads.test',
             'category' => 'Ad experience',
@@ -131,17 +151,32 @@ final class WebsiteAiAssessmentTest extends TestCase
             ->assertSee('Tính trung thực và minh bạch của nhà xuất bản')
             ->assertSee('Đối chiếu yêu cầu AdSense')
             ->assertSee('Chính sách AdSense/Google liên quan')
+            ->assertSee('URL ví dụ:')
+            ->assertSee('https://publisher.example/article-with-too-many-ads', false)
+            ->assertSee('Ad experience')
+            ->assertSee('https://support.google.com/adsense/answer/1346295?hl=vi', false)
+            ->assertSeeInOrder([
+                'Các dấu hiệu rủi ro đáng chú ý',
+                'Điều không thấy vi phạm rõ ràng',
+                'Kết luận tổng hợp',
+                'Thứ tự xử lý đề xuất',
+            ])
             ->assertSeeInOrder([
                 'Tổng quan nội dung và cấu trúc',
                 'https://support.google.com/publisherpolicies/answer/11190248?hl=vi',
                 'Tính trung thực và minh bạch của nhà xuất bản',
             ], false);
 
-        Http::assertSent(fn ($request): bool => str_contains($request->body(), 'MG-TEST')
-            && str_contains($request->body(), 'coverage_percent')
-            && str_contains($request->body(), 'adsense_policy_review_matrix')
-            && str_contains($request->body(), 'policy_references')
-            && str_contains($request->body(), 'Publisher identity, honesty and transparency'));
+        Http::assertSent(function ($request): bool {
+            $prompt = (string) data_get($request->data(), 'messages.1.content');
+
+            return str_contains($prompt, 'MG-TEST')
+                && str_contains($prompt, 'coverage_percent')
+                && str_contains($request->body(), 'policy_references')
+                && str_contains($prompt, 'adsense_policy_review_matrix')
+                && str_contains($prompt, 'https://publisher.example/article-with-too-many-ads')
+                && str_contains($prompt, 'Publisher identity, honesty and transparency');
+        });
     }
 
     public function test_gemini_uses_query_api_key_without_a_bearer_header(): void

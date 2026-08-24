@@ -36,6 +36,7 @@ final class WebsiteAiReviewerPatternTest extends TestCase
         $this->assertSame(2, $result['formulaic_or_cliffhanger_title_pages']);
         $this->assertSame(1, $result['next_part_title_pages']);
         $this->assertSame(2, $result['sensitive_sensational_title_pages']);
+        $this->assertCount(2, $result['formulaic_title_example_urls']);
         $this->assertSame(2, $result['bot_like_author_pages']);
         $this->assertSame(2, $result['maximum_posts_on_one_published_date']);
         $this->assertSame(1, $result['strong_authorship_or_originality_claims']['no_ai_claim']);
@@ -67,12 +68,17 @@ final class WebsiteAiReviewerPatternTest extends TestCase
         $this->assertStringContainsString('tuyên bố tuyệt đối', $assessment['transparency_overview']);
         $this->assertStringContainsString('mô hình nội dung sản xuất hàng loạt', mb_strtolower($assessment['policy_overview']));
         $this->assertNotEmpty($assessment['priorities']);
+        $scaledIssue = collect($assessment['key_issues'])->firstWhere('title', 'Mô hình nội dung sản xuất hàng loạt cần được xem xét');
+        $this->assertSame('Content quality', $scaledIssue['category']);
+        $this->assertCount(2, $scaledIssue['example_urls']);
+        $this->assertSame('https://support.google.com/adsense/answer/81904?hl=vi', $scaledIssue['policy_url']);
     }
 
     /** @param array<string, mixed> $meta */
     private function page(string $title, array $meta, ?string $essentialPageType = null): Page
     {
         return (new Page)->forceFill([
+            'url' => 'https://example.test/'.substr(hash('sha256', $title), 0, 12),
             'title' => $title,
             'meta' => $meta,
             'essential_page_type' => $essentialPageType,
