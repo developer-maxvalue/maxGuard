@@ -578,6 +578,13 @@ final class ScanRunner
         $aiInputTokens = 0;
         $aiOutputTokens = 0;
         $aiError = null;
+        $aiProvider = (string) config('maxguard.ai.provider', 'gemini');
+        $aiLabel = match ($aiProvider) {
+            'anthropic' => 'Claude/Anthropic',
+            'ollama' => 'Ollama',
+            'openai_compatible', 'openai' => 'OpenAI',
+            default => 'Gemini',
+        };
 
         if ($target->ai_attempted) {
             $aiAttempted = true;
@@ -586,7 +593,7 @@ final class ScanRunner
         } elseif ($this->reserveParallelAi($scan->id)) {
             $target->update(['ai_attempted' => true]);
             $aiAttempted = true;
-            $aiStarted = $telemetry->start($target, 'gemini', 'Gemini', 'Đang gửi nội dung trang đã chuẩn hóa để xem xét chính sách theo ngữ nghĩa.');
+            $aiStarted = $telemetry->start($target, $aiProvider, $aiLabel, 'Đang gửi nội dung trang đã chuẩn hóa để xem xét chính sách theo ngữ nghĩa.');
             $outcome = $this->ai->analyze($document);
             $aiInputTokens = $outcome->inputTokens;
             $aiOutputTokens = $outcome->outputTokens;
@@ -602,7 +609,7 @@ final class ScanRunner
             }
             $telemetry->finish(
                 $target,
-                'gemini',
+                $aiProvider,
                 $aiStarted,
                 ! $outcome->attempted ? 'skipped' : ($outcome->error === null ? 'success' : 'failed'),
                 $outcome->error ?? $aiFindings.' phát hiện từ AI.',
@@ -616,8 +623,8 @@ final class ScanRunner
                 ],
             );
         } else {
-            $aiStarted = $telemetry->start($target, 'gemini', 'Gemini', 'Đang kiểm tra AI đã bật và còn trong giới hạn số trang hay không.');
-            $telemetry->finish($target, 'gemini', $aiStarted, 'skipped', 'AI chưa bật, chưa được cấu hình hoặc đã đạt giới hạn số trang.');
+            $aiStarted = $telemetry->start($target, $aiProvider, $aiLabel, 'Đang kiểm tra AI đã bật và còn trong giới hạn số trang hay không.');
+            $telemetry->finish($target, $aiProvider, $aiStarted, 'skipped', 'AI chưa bật, chưa được cấu hình hoặc đã đạt giới hạn số trang.');
         }
 
         foreach ($results as $result) {

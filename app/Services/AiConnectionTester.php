@@ -24,6 +24,16 @@ final class AiConnectionTester
                     return ['success' => false, 'message' => 'Gemini yêu cầu API key.'];
                 }
                 $response = $request->get($baseUrl.'/models', ['key' => $setting->api_key]);
+            } elseif ($setting->provider === 'anthropic') {
+                if (blank($setting->api_key)) {
+                    return ['success' => false, 'message' => 'Claude/Anthropic yêu cầu API key.'];
+                }
+                $response = $request
+                    ->withHeaders([
+                        'x-api-key' => $setting->api_key,
+                        'anthropic-version' => '2023-06-01',
+                    ])
+                    ->get($baseUrl.'/models');
             } elseif ($setting->provider === 'ollama') {
                 if (filled($setting->api_key)) {
                     $request = $request->withToken($setting->api_key);
@@ -53,6 +63,7 @@ final class AiConnectionTester
     {
         return match ($provider) {
             'gemini' => 'Gemini',
+            'anthropic' => 'Claude/Anthropic',
             'ollama' => 'Ollama',
             default => 'API tương thích OpenAI',
         };

@@ -60,7 +60,7 @@ final class AiConfiguration
     public function isReady(): bool
     {
         $values = $this->apply();
-        $keyRequired = in_array($values['provider'], ['gemini', 'openai'], true);
+        $keyRequired = in_array($values['provider'], ['gemini', 'anthropic', 'openai'], true);
 
         return (bool) $values['enabled']
             && filled($values['base_url'])
@@ -85,6 +85,7 @@ final class AiConfiguration
     {
         return match ($provider) {
             'ollama' => 'http://127.0.0.1:11434',
+            'anthropic' => 'https://api.anthropic.com/v1',
             'openai_compatible', 'openai' => 'https://api.openai.com/v1',
             default => 'https://generativelanguage.googleapis.com/v1beta',
         };
@@ -94,6 +95,7 @@ final class AiConfiguration
     {
         return match ($provider) {
             'ollama' => 'qwen3:8b',
+            'anthropic' => 'claude-sonnet-5',
             'openai_compatible', 'openai' => 'gpt-4.1-mini',
             default => 'gemini-2.5-flash',
         };

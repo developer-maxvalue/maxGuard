@@ -47,6 +47,7 @@ final class UiText
         'external_copy' => 'Đối chiếu nội dung ngoài website',
         'sightengine' => 'Sightengine',
         'gemini' => 'Gemini',
+        'anthropic' => 'Claude/Anthropic',
         'pipeline' => 'Quy trình xử lý',
         'waiting' => 'Đang chờ',
         'critical' => 'Nghiêm trọng',

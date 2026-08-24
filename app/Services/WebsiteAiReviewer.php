@@ -492,7 +492,12 @@ SQL)->first();
         // Gemini Developer API authenticates with the `key` query parameter.
         // Sending the same API key as a Bearer token makes Google interpret it
         // as an OAuth credential and returns "API keys are not supported".
-        if ($provider !== 'gemini' && filled(config('maxguard.ai.api_key'))) {
+        if ($provider === 'anthropic') {
+            $request = $request->withHeaders([
+                'x-api-key' => (string) config('maxguard.ai.api_key'),
+                'anthropic-version' => '2023-06-01',
+            ]);
+        } elseif ($provider !== 'gemini' && filled(config('maxguard.ai.api_key'))) {
             $request = $request->withToken((string) config('maxguard.ai.api_key'));
         }
 
@@ -510,6 +515,21 @@ SQL)->first();
                 ],
             ]);
             $text = $response->successful() ? data_get($response->json(), 'candidates.0.content.parts.0.text') : null;
+        } elseif ($provider === 'anthropic') {
+            $response = $request->post($baseUrl.'/messages', [
+                'model' => $model,
+                'max_tokens' => max(1200, (int) config('maxguard.ai.max_output_tokens', 3000)),
+                'temperature' => 0.1,
+                'system' => $system,
+                'messages' => [['role' => 'user', 'content' => $user]],
+                'output_config' => [
+                    'format' => [
+                        'type' => 'json_schema',
+                        'schema' => $this->schema(),
+                    ],
+                ],
+            ]);
+            $text = $response->successful() ? data_get($response->json(), 'content.0.text') : null;
         } elseif ($provider === 'ollama') {
             $response = $request->post($baseUrl.'/api/chat', [
                 'model' => $model,

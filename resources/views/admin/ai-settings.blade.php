@@ -38,6 +38,7 @@
                         <div class="mg-scan-options">
                             @foreach ([
                                 ['gemini', 'Google Gemini', 'Kết nối trực tiếp Gemini API', 'bi-google'],
+                                ['anthropic', 'Claude / Anthropic', 'Kết nối trực tiếp Claude API của Anthropic', 'bi-stars'],
                                 ['ollama', 'Ollama', 'Mô hình chạy cục bộ qua Ollama', 'bi-pc-display'],
                                 ['openai_compatible', 'Tương thích OpenAI', 'OpenAI, OpenRouter, LM Studio hoặc endpoint tương thích', 'bi-braces-asterisk'],
                             ] as $provider)
@@ -125,6 +126,7 @@
 (() => {
     const defaults = {
         gemini: {url: 'https://generativelanguage.googleapis.com/v1beta', model: 'gemini-2.5-flash', help: 'Gemini API v1beta; API key là bắt buộc.'},
+        anthropic: {url: 'https://api.anthropic.com/v1', model: 'claude-sonnet-5', help: 'Claude Messages API; cần API key từ Anthropic Console, không dùng tài khoản đăng nhập claude.ai.'},
         ollama: {url: 'http://127.0.0.1:11434', model: 'qwen3:8b', help: 'URL gốc của Ollama; không cần thêm /api/chat.'},
         openai_compatible: {url: 'https://api.openai.com/v1', model: 'gpt-4.1-mini', help: 'URL gốc có endpoint /chat/completions và /models.'}
     };

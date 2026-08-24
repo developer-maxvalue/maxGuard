@@ -16,7 +16,7 @@ final class UpdateAiSettingRequest extends FormRequest
     {
         return [
             'enabled' => ['nullable', 'boolean'],
-            'provider' => ['required', 'in:gemini,ollama,openai_compatible'],
+            'provider' => ['required', 'in:gemini,anthropic,ollama,openai_compatible'],
             'base_url' => ['required', 'url', 'max:2048', 'starts_with:http://,https://'],
             'api_key' => ['nullable', 'string', 'max:4096'],
             'clear_api_key' => ['nullable', 'boolean'],
@@ -35,13 +35,14 @@ final class UpdateAiSettingRequest extends FormRequest
     public function withValidator($validator): void
     {
         $validator->after(function ($validator): void {
-            if (! $this->boolean('enabled') || $this->input('provider') !== 'gemini') {
+            if (! $this->boolean('enabled') || ! in_array($this->input('provider'), ['gemini', 'anthropic'], true)) {
                 return;
             }
 
             $hasStoredKey = filled(AiSetting::query()->latest('id')->value('api_key'));
             if ($this->boolean('clear_api_key') || (! $hasStoredKey && blank($this->input('api_key')))) {
-                $validator->errors()->add('api_key', 'Gemini yêu cầu API key khi bật phân tích AI.');
+                $provider = $this->input('provider') === 'anthropic' ? 'Claude/Anthropic' : 'Gemini';
+                $validator->errors()->add('api_key', $provider.' yêu cầu API key khi bật phân tích AI.');
             }
         });
     }

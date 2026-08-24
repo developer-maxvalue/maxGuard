@@ -65,6 +65,27 @@ final class AiSettingsManagementTest extends TestCase
         Http::assertSent(fn ($request): bool => $request->url() === 'http://127.0.0.1:11434/api/tags');
     }
 
+    public function test_admin_can_save_and_test_an_anthropic_connection(): void
+    {
+        Http::fake(['https://api.anthropic.test/v1/models' => Http::response(['data' => []])]);
+        $admin = User::factory()->create(['is_admin' => true]);
+
+        $this->actingAs($admin)
+            ->patch(route('admin.ai-settings.update'), $this->payload([
+                'provider' => 'anthropic',
+                'base_url' => 'https://api.anthropic.test/v1',
+                'api_key' => 'anthropic-test-key',
+                'model' => 'claude-sonnet-5',
+                'test_connection' => '1',
+            ]))
+            ->assertRedirect()
+            ->assertSessionHas('status', 'Kết nối thành công đến Claude/Anthropic.');
+
+        Http::assertSent(fn ($request): bool => $request->url() === 'https://api.anthropic.test/v1/models'
+            && $request->hasHeader('x-api-key', 'anthropic-test-key')
+            && $request->hasHeader('anthropic-version', '2023-06-01'));
+    }
+
     /** @param array<string, mixed> $overrides @return array<string, mixed> */
     private function payload(array $overrides = []): array
     {

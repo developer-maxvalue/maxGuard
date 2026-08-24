@@ -178,4 +178,62 @@ final class WebsiteAiAssessmentTest extends TestCase
                 && ! $request->hasHeader('Authorization');
         });
     }
+
+    public function test_anthropic_website_review_uses_messages_api(): void
+    {
+        config()->set([
+            'maxguard.ai.enabled' => true,
+            'maxguard.ai.provider' => 'anthropic',
+            'maxguard.ai.api_key' => 'anthropic-test-key',
+            'maxguard.ai.base_url' => 'https://api.anthropic.test/v1',
+            'maxguard.ai.model' => 'claude-test-model',
+            'maxguard.ai.output_language' => 'Vietnamese',
+        ]);
+        Http::fake([
+            'https://api.anthropic.test/v1/messages' => Http::response([
+                'id' => 'msg_review_1',
+                'content' => [['type' => 'text', 'text' => json_encode([
+                    'risk_level' => 'healthy',
+                    'headline' => 'Chưa phát hiện rủi ro lớn',
+                    'summary' => 'Dữ liệu quét hiện tại chưa có tín hiệu đáng kể.',
+                    'content_overview' => 'Chưa phát hiện tín hiệu nội dung đáng kể.',
+                    'transparency_overview' => 'Chưa đủ dữ liệu để kết luận.',
+                    'adsense_requirements_overview' => 'Cần tiếp tục theo dõi.',
+                    'policy_overview' => 'Không có finding chính sách đang mở.',
+                    'policy_references' => [],
+                    'recommendations' => [],
+                    'limitations' => [],
+                ], JSON_UNESCAPED_UNICODE)]],
+                'usage' => ['input_tokens' => 50, 'output_tokens' => 20],
+            ]),
+        ]);
+
+        $owner = User::factory()->create();
+        $website = Website::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Claude Publisher',
+            'slug' => 'claude-publisher-example',
+            'domain' => 'claude-publisher.example',
+            'start_url' => 'https://claude-publisher.example/',
+            'status' => 'healthy',
+            'overall_score' => 100,
+        ]);
+        $scan = $website->scans()->create([
+            'type' => 'full',
+            'status' => Scan::STATUS_COMPLETED,
+            'progress' => 100,
+            'pages_discovered' => 1,
+            'pages_scanned' => 1,
+            'score' => 100,
+            'finished_at' => now(),
+        ]);
+
+        app(\App\Services\WebsiteAiReviewer::class)->reviewAndStore($scan);
+
+        $this->assertSame('anthropic', $scan->fresh()->ai_assessment['provider']);
+        Http::assertSent(fn ($request): bool => $request->url() === 'https://api.anthropic.test/v1/messages'
+            && $request->hasHeader('x-api-key', 'anthropic-test-key')
+            && $request->hasHeader('anthropic-version', '2023-06-01')
+            && data_get($request->data(), 'output_config.format.type') === 'json_schema');
+    }
 }

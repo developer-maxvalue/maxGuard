@@ -9,6 +9,17 @@ use App\Detectors\PrivacyDetector;
 use App\Detectors\PublisherPolicyPagesDetector;
 use App\Detectors\TechnicalTrustDetector;
 
+$aiProvider = env('MAXGUARD_AI_PROVIDER', 'openai');
+$aiApiKey = match ($aiProvider) {
+    'anthropic' => env('ANTHROPIC_API_KEY'),
+    'gemini' => env('GEMINI_API_KEY'),
+    default => env('OPENAI_API_KEY'),
+};
+$aiBaseUrl = match ($aiProvider) {
+    'anthropic' => env('ANTHROPIC_BASE_URL', 'https://api.anthropic.com/v1'),
+    default => env('OPENAI_BASE_URL', 'https://api.openai.com/v1'),
+};
+
 return [
     // Set this to false when the host project already provides Breeze,
     // Jetstream, Fortify or another authentication implementation.
@@ -35,9 +46,9 @@ return [
         'enabled' => (bool) env('MAXGUARD_AI_ENABLED', false),
         // OpenAI remains the code-level compatibility default. The distributed
         // MaxGuard env template explicitly selects Gemini for new installs.
-        'provider' => env('MAXGUARD_AI_PROVIDER', 'openai'),
-        'api_key' => env('GEMINI_API_KEY', env('OPENAI_API_KEY')),
-        'base_url' => env('OPENAI_BASE_URL', 'https://api.openai.com/v1'),
+        'provider' => $aiProvider,
+        'api_key' => $aiApiKey,
+        'base_url' => $aiBaseUrl,
         'gemini_base_url' => env('GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com/v1beta'),
         // Terra balances policy-review quality, latency and cost. Use gpt-5.6-sol for highest-quality review.
         'model' => env('MAXGUARD_AI_MODEL', 'gemini-2.5-flash'),

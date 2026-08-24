@@ -32,7 +32,7 @@ final class AiPolicyAnalyzer
     public function isConfigured(): bool
     {
         $provider = (string) config('maxguard.ai.provider', 'openai');
-        $keyRequired = in_array($provider, ['gemini', 'openai'], true);
+        $keyRequired = in_array($provider, ['gemini', 'anthropic', 'openai'], true);
 
         return (bool) config('maxguard.ai.enabled')
             && filled(config('maxguard.ai.base_url'))
@@ -64,6 +64,9 @@ final class AiPolicyAnalyzer
             $provider = (string) config('maxguard.ai.provider', 'openai');
             if ($provider === 'gemini' && ! str_starts_with(strtolower($model), 'gpt-')) {
                 return $this->analyzeWithGemini($page, $content, $model);
+            }
+            if ($provider === 'anthropic') {
+                return $this->analyzeWithAnthropic($page, $content, $model);
             }
             if ($provider === 'ollama') {
                 return $this->analyzeWithOllama($page, $content, $model);
@@ -143,6 +146,59 @@ final class AiPolicyAnalyzer
 
             return new AiAnalysisOutcome(true, model: $model, error: mb_substr($exception->getMessage(), 0, 500));
         }
+    }
+
+    /** Call Anthropic's native Messages API with a JSON schema output. */
+    private function analyzeWithAnthropic(PageDocument $page, string $content, string $model): AiAnalysisOutcome
+    {
+        $baseUrl = rtrim((string) config('maxguard.ai.base_url', 'https://api.anthropic.com/v1'), '/');
+        $response = Http::acceptJson()->asJson()
+            ->withHeaders([
+                'x-api-key' => (string) config('maxguard.ai.api_key'),
+                'anthropic-version' => '2023-06-01',
+            ])
+            ->connectTimeout((int) config('maxguard.ai.connect_timeout_seconds', 10))
+            ->timeout((int) config('maxguard.ai.timeout_seconds', 90))
+            ->retry(2, 750, fn (Throwable $error): bool => $error instanceof ConnectionException, false)
+            ->post($baseUrl.'/messages', [
+                'model' => $model,
+                'max_tokens' => max(500, (int) config('maxguard.ai.max_output_tokens', 1800)),
+                'temperature' => 0.1,
+                'system' => $this->systemPrompt(),
+                'messages' => [['role' => 'user', 'content' => $this->pagePrompt($page, $content)]],
+                'output_config' => [
+                    'format' => [
+                        'type' => 'json_schema',
+                        'schema' => $this->schema(),
+                    ],
+                ],
+            ]);
+
+        if (! $response->successful()) {
+            return new AiAnalysisOutcome(
+                true,
+                model: $model,
+                httpStatus: $response->status(),
+                error: 'Anthropic API trả về HTTP '.$response->status().': '.mb_substr($response->body(), 0, 1000),
+            );
+        }
+
+        $payload = (array) $response->json();
+        $text = data_get($payload, 'content.0.text');
+        if (! is_string($text)) {
+            return new AiAnalysisOutcome(true, model: $model, error: 'Phản hồi Anthropic không chứa JSON có cấu trúc.');
+        }
+        $analysis = json_decode($text, true, 512, JSON_THROW_ON_ERROR);
+        $responseId = is_string($payload['id'] ?? null) ? $payload['id'] : null;
+
+        return new AiAnalysisOutcome(
+            attempted: true,
+            findings: $this->toDetectorResults((array) $analysis, $model, $responseId, 'anthropic'),
+            model: $model,
+            responseId: $responseId,
+            inputTokens: (int) data_get($payload, 'usage.input_tokens', 0),
+            outputTokens: (int) data_get($payload, 'usage.output_tokens', 0),
+        );
     }
 
     /** Call Gemini using JSON response mode and convert it to standard findings. */

@@ -54,7 +54,7 @@
 (() => {
     const endpoint = @json(route('scans.targets.live', $scan));
     const statusLabels = {queued:'Đang chờ', running:'Đang chạy', completed:'Hoàn tất', reused:'Đã tái sử dụng', failed:'Thất bại', cancelled:'Đã hủy'};
-    const stageLabels = {crawl:'Thu thập dữ liệu', reuse:'Tái sử dụng kết quả', local_rules:'Quy tắc cục bộ', sightengine:'Sightengine', gemini:'Gemini', pipeline:'Quy trình xử lý'};
+    const stageLabels = {crawl:'Thu thập dữ liệu', reuse:'Tái sử dụng kết quả', local_rules:'Quy tắc cục bộ', sightengine:'Sightengine', gemini:'Gemini', anthropic:'Claude/Anthropic', ollama:'Ollama', openai_compatible:'OpenAI', pipeline:'Quy trình xử lý'};
     const refresh = () => fetch(endpoint, {headers:{Accept:'application/json'}}).then(r => r.json()).then(data => {
         data.targets.forEach(target => {
             const row = document.querySelector(`[data-target-id="${target.id}"]`);

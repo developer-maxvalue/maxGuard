@@ -66,6 +66,37 @@ final class AiProviderAdaptersTest extends TestCase
             && $request->hasHeader('Authorization', 'Bearer compatible-key'));
     }
 
+    public function test_anthropic_provider_uses_messages_api_and_json_schema_output(): void
+    {
+        config()->set([
+            'maxguard.ai.enabled' => true,
+            'maxguard.ai.provider' => 'anthropic',
+            'maxguard.ai.api_key' => 'anthropic-key',
+            'maxguard.ai.base_url' => 'https://api.anthropic.test/v1',
+            'maxguard.ai.model' => 'claude-test-model',
+            'maxguard.ai.min_confidence' => 70,
+        ]);
+        Http::fake([
+            'https://api.anthropic.test/v1/messages' => Http::response([
+                'id' => 'msg_test',
+                'content' => [['type' => 'text', 'text' => json_encode(['findings' => []], JSON_THROW_ON_ERROR)]],
+                'usage' => ['input_tokens' => 42, 'output_tokens' => 9],
+            ]),
+        ]);
+
+        $outcome = app(AiPolicyAnalyzer::class)->analyze($this->page());
+
+        $this->assertTrue($outcome->attempted);
+        $this->assertNull($outcome->error);
+        $this->assertSame(42, $outcome->inputTokens);
+        $this->assertSame(9, $outcome->outputTokens);
+        Http::assertSent(fn (Request $request): bool => $request->url() === 'https://api.anthropic.test/v1/messages'
+            && $request->hasHeader('x-api-key', 'anthropic-key')
+            && $request->hasHeader('anthropic-version', '2023-06-01')
+            && data_get($request->data(), 'output_config.format.type') === 'json_schema'
+            && data_get($request->data(), 'messages.0.role') === 'user');
+    }
+
     private function page(): PageDocument
     {
         return new PageDocument(
