@@ -17,8 +17,9 @@ final class WebsiteAiReviewer
         $scan->loadMissing('website');
         $model = (string) config('maxguard.ai.model');
         $provider = (string) config('maxguard.ai.provider', 'openai');
-        $payload = $this->request($provider, $model, $this->context($scan));
-        $assessment = $this->normalize($payload);
+        $context = $this->context($scan);
+        $payload = $this->request($provider, $model, $context);
+        $assessment = $this->applyPatternFindings($this->normalize($payload), $context);
         $assessment['model'] = $model;
         $assessment['provider'] = $provider;
         $assessment['scan_id'] = $scan->id;
@@ -350,6 +351,129 @@ SQL)->first();
     private function ascii(string $value): string
     {
         return mb_strtolower(iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $value) ?: $value);
+    }
+
+    /** @param array<string, mixed> $assessment @param array<string, mixed> $context @return array<string, mixed> */
+    private function applyPatternFindings(array $assessment, array $context): array
+    {
+        $evidence = (array) data_get($context, 'whole_site_page_profile.content_pattern_evidence', []);
+        $formulaic = (int) ($evidence['formulaic_or_cliffhanger_title_pages'] ?? 0);
+        $ratio = (float) ($evidence['formulaic_title_ratio_percent'] ?? 0);
+        $nextPart = (int) ($evidence['next_part_title_pages'] ?? 0);
+        $botAuthors = (int) ($evidence['bot_like_author_pages'] ?? 0);
+        $maxPerDate = (int) ($evidence['maximum_posts_on_one_published_date'] ?? 0);
+        $scaledSignals = collect([$formulaic >= 3, $nextPart >= 3, $botAuthors >= 3, $maxPerDate >= 5])->filter()->count();
+        $scaledPattern = $scaledSignals >= 2 || $formulaic >= 10 || $nextPart >= 5;
+
+        if ($scaledPattern) {
+            $severity = $formulaic >= 10 && $ratio >= 40 ? 'high' : 'review';
+            $authors = array_slice(array_keys((array) ($evidence['author_distribution'] ?? [])), 0, 6);
+            $details = "Phát hiện {$formulaic} tiêu đề theo công thức/cliffhanger ({$ratio}%), {$nextPart} tiêu đề “Next part”, {$botAuthors} trang có mã tác giả dạng định danh và tối đa {$maxPerDate} bài cùng ngày xuất bản.";
+            if ($authors !== []) {
+                $details .= ' Các tác giả nổi bật: '.implode(', ', $authors).'.';
+            }
+            $this->appendIssue($assessment, [
+                'title' => 'Mô hình nội dung sản xuất hàng loạt cần được xem xét',
+                'severity' => $severity,
+                'why_it_matters' => 'Sự kết hợp giữa tiêu đề lặp công thức, chuỗi “Next part”, tác giả dạng mã và nhịp xuất bản dày là tín hiệu của nội dung quy mô lớn/giá trị thấp. Đây là chỉ báo rủi ro, không phải bằng chứng tự thân rằng nội dung do AI tạo.',
+                'evidence' => $details,
+                'recommendation' => 'Rà soát thủ công nguồn gốc bài viết; giảm nội dung theo khuôn mẫu; dùng byline có danh tính và hồ sơ biên tập có thể xác minh; chứng minh giá trị độc lập của từng bài.',
+            ]);
+            $assessment['content_overview'] = trim((string) ($assessment['content_overview'] ?? '').' '.$details.' Mẫu tổng hợp này cần được đánh giá như rủi ro scaled/low-value content.');
+            $assessment['policy_overview'] = trim((string) ($assessment['policy_overview'] ?? '').' Phát hiện mô hình nội dung sản xuất hàng loạt cần xem xét: nhiều tiêu đề cliffhanger/“Next part”, tác giả dạng mã và nhịp xuất bản tập trung xuất hiện đồng thời.');
+            $assessment['priorities'][] = 'Ưu tiên kiểm tra và xử lý cụm bài có tiêu đề cliffhanger, “Next part” và tác giả dạng mã trước khi gửi xét duyệt AdSense.';
+            $this->appendPolicyReference($assessment, [
+                'section' => 'content_overview',
+                'issue' => 'Nội dung theo khuôn mẫu hoặc sản xuất hàng loạt có giá trị thấp',
+                'relevance' => 'Nội dung dành cho nhà xuất bản cần có giá trị độc lập, đủ chiều sâu và không chỉ được tạo theo mẫu để mở rộng số lượng trang.',
+                'policy_url' => 'https://support.google.com/adsense/answer/81904?hl=vi',
+            ]);
+            $assessment['risk_level'] = $this->higherRisk((string) ($assessment['risk_level'] ?? 'healthy'), $severity);
+        }
+
+        $claims = (array) ($evidence['strong_authorship_or_originality_claims'] ?? []);
+        if ($scaledPattern && $claims !== []) {
+            $this->appendIssue($assessment, [
+                'title' => 'Tuyên bố tuyệt đối về tác giả và tính nguyên bản cần được xác minh',
+                'severity' => 'review',
+                'why_it_matters' => 'Website đưa ra tuyên bố mạnh như human-written/no AI/originality trong khi các mẫu xuất bản hàng loạt nêu trên vẫn hiện diện. Công cụ không kết luận nội dung do AI tạo, nhưng sự nhất quán của tuyên bố cần có bằng chứng.',
+                'evidence' => 'Tín hiệu tuyên bố tìm thấy: '.implode(', ', array_keys($claims)).'.',
+                'recommendation' => 'Thay tuyên bố tuyệt đối bằng mô tả quy trình biên tập có thể kiểm chứng và công khai danh tính, vai trò, lịch sử tác giả.',
+            ]);
+            $assessment['transparency_overview'] = trim((string) ($assessment['transparency_overview'] ?? '').' Website có tuyên bố tuyệt đối về việc con người viết/không dùng AI/tính nguyên bản, trong khi dữ liệu quét đồng thời cho thấy mô hình xuất bản hàng loạt; tính chính xác của tuyên bố cần được xác minh bằng quy trình và hồ sơ tác giả cụ thể.');
+            $assessment['priorities'][] = 'Đối chiếu các tuyên bố “human-written/no AI/original” với hồ sơ tác giả và quy trình biên tập có thể kiểm chứng.';
+            $this->appendPolicyReference($assessment, [
+                'section' => 'transparency_overview',
+                'issue' => 'Tuyên bố về nhà xuất bản hoặc nguồn gốc nội dung cần chính xác',
+                'relevance' => 'Thông tin về danh tính, nguồn gốc và cách tạo nội dung không nên gây hiểu lầm hoặc che giấu thông tin quan trọng.',
+                'policy_url' => 'https://support.google.com/publisherpolicies/answer/11185755?hl=vi',
+            ]);
+        }
+
+        $institutions = array_keys((array) ($evidence['institution_references_on_transparency_pages'] ?? []));
+        if ($institutions !== []) {
+            $this->appendIssue($assessment, [
+                'title' => 'Tín hiệu liên hệ với tổ chức cần được xác minh',
+                'severity' => 'review',
+                'why_it_matters' => 'Tên hoặc logo tổ chức trên trang giới thiệu có thể khiến người đọc hiểu là có công nhận hay liên kết chính thức.',
+                'evidence' => 'Các tham chiếu được phát hiện trên trang minh bạch: '.implode(', ', $institutions).'. Công cụ chưa xác minh được quan hệ chính thức.',
+                'recommendation' => 'Gỡ logo/tên nếu không có quan hệ; nếu có, ghi rõ bản chất liên hệ và cung cấp nguồn xác minh.',
+            ]);
+            $assessment['transparency_overview'] = trim((string) ($assessment['transparency_overview'] ?? '').' Trang minh bạch có tham chiếu tới '.implode(', ', $institutions).'; cần xác minh cách trình bày có khiến người đọc hiểu nhầm về công nhận, đối tác hoặc liên kết chính thức hay không.');
+            $assessment['priorities'][] = 'Xác minh hoặc gỡ các logo/tên tổ chức không có quan hệ chính thức với nhà xuất bản.';
+            $this->appendPolicyReference($assessment, [
+                'section' => 'transparency_overview',
+                'issue' => 'Tín hiệu tin cậy hoặc liên kết tổ chức cần trung thực',
+                'relevance' => 'Logo và tên tổ chức không nên được trình bày theo cách tạo ấn tượng sai về công nhận hoặc quan hệ chính thức.',
+                'policy_url' => 'https://support.google.com/publisherpolicies/answer/11185755?hl=vi',
+            ]);
+        }
+
+        $sensitive = (int) ($evidence['sensitive_sensational_title_pages'] ?? 0);
+        if ($sensitive >= 3) {
+            $this->appendIssue($assessment, [
+                'title' => 'Chủ đề nhạy cảm đang được đóng gói theo hướng giật gân',
+                'severity' => 'review',
+                'why_it_matters' => 'Khai thác bạo lực, xâm hại hoặc sức khỏe tâm thần bằng tiêu đề gây sốc làm giảm tín hiệu chất lượng và độ tin cậy dù chủ đề không tự động bị cấm.',
+                'evidence' => "Phát hiện {$sensitive} tiêu đề kết hợp chủ đề nhạy cảm với từ ngữ giật gân.",
+                'recommendation' => 'Viết lại tiêu đề trung tính, cung cấp bối cảnh và tránh dùng tổn thương hoặc bệnh lý làm cliffhanger.',
+            ]);
+            $assessment['content_overview'] = trim((string) ($assessment['content_overview'] ?? '')." Phát hiện {$sensitive} tiêu đề khai thác chủ đề nhạy cảm theo hướng giật gân; cần rà soát chất lượng biên tập và ngữ cảnh.");
+            $assessment['priorities'][] = 'Viết lại các tiêu đề khai thác bạo lực, xâm hại hoặc sức khỏe tâm thần theo hướng trung tính và có ngữ cảnh.';
+        }
+
+        $assessment['key_issues'] = array_slice(array_values((array) ($assessment['key_issues'] ?? [])), 0, 12);
+        $assessment['priorities'] = array_slice(array_values(array_unique((array) ($assessment['priorities'] ?? []))), 0, 10);
+        $assessment['policy_references'] = array_slice(array_values((array) ($assessment['policy_references'] ?? [])), 0, 12);
+
+        return $assessment;
+    }
+
+    /** @param array<string, mixed> $assessment @param array<string, string> $issue */
+    private function appendIssue(array &$assessment, array $issue): void
+    {
+        $issues = (array) ($assessment['key_issues'] ?? []);
+        if (! collect($issues)->contains(fn ($existing): bool => is_array($existing) && ($existing['title'] ?? null) === $issue['title'])) {
+            $issues[] = $issue;
+        }
+        $assessment['key_issues'] = $issues;
+    }
+
+    /** @param array<string, mixed> $assessment @param array<string, string> $reference */
+    private function appendPolicyReference(array &$assessment, array $reference): void
+    {
+        $references = (array) ($assessment['policy_references'] ?? []);
+        if (! collect($references)->contains(fn ($existing): bool => is_array($existing) && ($existing['policy_url'] ?? null) === $reference['policy_url'])) {
+            $references[] = $reference;
+        }
+        $assessment['policy_references'] = $references;
+    }
+
+    private function higherRisk(string $current, string $candidate): string
+    {
+        $rank = ['healthy' => 0, 'info' => 1, 'review' => 2, 'high' => 3, 'critical' => 4];
+
+        return ($rank[$candidate] ?? 0) > ($rank[$current] ?? 0) ? $candidate : $current;
     }
 
     /** @return array<string, mixed> */

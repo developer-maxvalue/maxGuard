@@ -28,13 +28,18 @@ final class PageInspector
         $author = $this->firstAttribute($xpath, [
             '//meta[translate(@name,"ABCDEFGHIJKLMNOPQRSTUVWXYZ","abcdefghijklmnopqrstuvwxyz")="author"]/@content',
             '//meta[translate(@property,"ABCDEFGHIJKLMNOPQRSTUVWXYZ","abcdefghijklmnopqrstuvwxyz")="article:author"]/@content',
-            '//*[contains(concat(" ", translate(normalize-space(@class),"ABCDEFGHIJKLMNOPQRSTUVWXYZ","abcdefghijklmnopqrstuvwxyz"), " "), " author ")]//text()',
+            '//a[contains(translate(@rel,"ABCDEFGHIJKLMNOPQRSTUVWXYZ","abcdefghijklmnopqrstuvwxyz"),"author")]/text()',
+            '//a[contains(translate(@href,"ABCDEFGHIJKLMNOPQRSTUVWXYZ","abcdefghijklmnopqrstuvwxyz"),"/author/")]/text()',
+            '//*[contains(translate(@class,"ABCDEFGHIJKLMNOPQRSTUVWXYZ","abcdefghijklmnopqrstuvwxyz"),"author") or contains(translate(@class,"ABCDEFGHIJKLMNOPQRSTUVWXYZ","abcdefghijklmnopqrstuvwxyz"),"byline")]//text()',
         ]);
         $publishedAt = $this->firstAttribute($xpath, [
             '//meta[translate(@property,"ABCDEFGHIJKLMNOPQRSTUVWXYZ","abcdefghijklmnopqrstuvwxyz")="article:published_time"]/@content',
             '//meta[translate(@name,"ABCDEFGHIJKLMNOPQRSTUVWXYZ","abcdefghijklmnopqrstuvwxyz")="date"]/@content',
             '//time[@datetime]/@datetime',
         ]);
+        $structuredData = $this->structuredData($xpath);
+        $author ??= $structuredData['author'];
+        $publishedAt ??= $structuredData['published_at'];
 
         $links = [];
         $linksWithText = [];
@@ -172,5 +177,44 @@ final class PageInspector
     private function ascii(string $value): string
     {
         return mb_strtolower(iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $value) ?: $value);
+    }
+
+    /** @return array{author: ?string, published_at: ?string} */
+    private function structuredData(DOMXPath $xpath): array
+    {
+        $author = null;
+        $publishedAt = null;
+        foreach ($xpath->query('//script[translate(@type,"ABCDEFGHIJKLMNOPQRSTUVWXYZ","abcdefghijklmnopqrstuvwxyz")="application/ld+json"]') as $node) {
+            $decoded = json_decode(trim((string) $node->textContent), true);
+            if (! is_array($decoded)) {
+                continue;
+            }
+            $items = isset($decoded['@graph']) && is_array($decoded['@graph']) ? $decoded['@graph'] : [$decoded];
+            foreach ($items as $item) {
+                if (! is_array($item)) {
+                    continue;
+                }
+                $candidate = $item['author'] ?? null;
+                if ($author === null && is_string($candidate)) {
+                    $author = trim($candidate);
+                } elseif ($author === null && is_array($candidate)) {
+                    if (is_string($candidate['name'] ?? null)) {
+                        $author = trim($candidate['name']);
+                    } elseif (is_string($candidate[0] ?? null)) {
+                        $author = trim($candidate[0]);
+                    } elseif (is_array($candidate[0] ?? null) && is_string($candidate[0]['name'] ?? null)) {
+                        $author = trim($candidate[0]['name']);
+                    }
+                }
+                if ($publishedAt === null && is_string($item['datePublished'] ?? null)) {
+                    $publishedAt = trim((string) $item['datePublished']);
+                }
+            }
+        }
+
+        return [
+            'author' => $author !== '' ? $author : null,
+            'published_at' => $publishedAt !== '' ? $publishedAt : null,
+        ];
     }
 }
