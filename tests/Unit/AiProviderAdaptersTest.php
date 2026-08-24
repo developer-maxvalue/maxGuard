@@ -90,11 +90,18 @@ final class AiProviderAdaptersTest extends TestCase
         $this->assertNull($outcome->error);
         $this->assertSame(42, $outcome->inputTokens);
         $this->assertSame(9, $outcome->outputTokens);
-        Http::assertSent(fn (Request $request): bool => $request->url() === 'https://api.anthropic.test/v1/messages'
-            && $request->hasHeader('x-api-key', 'anthropic-key')
-            && $request->hasHeader('anthropic-version', '2023-06-01')
-            && data_get($request->data(), 'output_config.format.type') === 'json_schema'
-            && data_get($request->data(), 'messages.0.role') === 'user');
+        Http::assertSent(function (Request $request): bool {
+            $schema = json_encode(data_get($request->data(), 'output_config.format.schema'));
+
+            return $request->url() === 'https://api.anthropic.test/v1/messages'
+                && $request->hasHeader('x-api-key', 'anthropic-key')
+                && $request->hasHeader('anthropic-version', '2023-06-01')
+                && data_get($request->data(), 'output_config.format.type') === 'json_schema'
+                && data_get($request->data(), 'messages.0.role') === 'user'
+                && ! str_contains((string) $schema, 'maxItems')
+                && ! str_contains((string) $schema, 'minimum')
+                && ! str_contains((string) $schema, 'maximum');
+        });
     }
 
     private function page(): PageDocument

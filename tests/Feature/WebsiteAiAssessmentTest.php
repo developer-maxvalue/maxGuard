@@ -231,9 +231,14 @@ final class WebsiteAiAssessmentTest extends TestCase
         app(\App\Services\WebsiteAiReviewer::class)->reviewAndStore($scan);
 
         $this->assertSame('anthropic', $scan->fresh()->ai_assessment['provider']);
-        Http::assertSent(fn ($request): bool => $request->url() === 'https://api.anthropic.test/v1/messages'
-            && $request->hasHeader('x-api-key', 'anthropic-test-key')
-            && $request->hasHeader('anthropic-version', '2023-06-01')
-            && data_get($request->data(), 'output_config.format.type') === 'json_schema');
+        Http::assertSent(function ($request): bool {
+            $schema = json_encode(data_get($request->data(), 'output_config.format.schema'));
+
+            return $request->url() === 'https://api.anthropic.test/v1/messages'
+                && $request->hasHeader('x-api-key', 'anthropic-test-key')
+                && $request->hasHeader('anthropic-version', '2023-06-01')
+                && data_get($request->data(), 'output_config.format.type') === 'json_schema'
+                && ! str_contains((string) $schema, 'maxItems');
+        });
     }
 }

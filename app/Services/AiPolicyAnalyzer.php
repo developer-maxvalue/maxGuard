@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Data\AiAnalysisOutcome;
 use App\Data\DetectorResult;
 use App\Data\PageDocument;
+use App\Support\AnthropicJsonSchema;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -169,7 +170,7 @@ final class AiPolicyAnalyzer
                 'output_config' => [
                     'format' => [
                         'type' => 'json_schema',
-                        'schema' => $this->schema(),
+                        'schema' => AnthropicJsonSchema::sanitize($this->schema()),
                     ],
                 ],
             ]);

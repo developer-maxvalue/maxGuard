@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Scan;
+use App\Support\AnthropicJsonSchema;
 use App\Support\EssentialPublisherPages;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
@@ -525,7 +526,7 @@ SQL)->first();
                 'output_config' => [
                     'format' => [
                         'type' => 'json_schema',
-                        'schema' => $this->schema(),
+                        'schema' => AnthropicJsonSchema::sanitize($this->schema()),
                     ],
                 ],
             ]);
