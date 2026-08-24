@@ -32,7 +32,11 @@ final class GenerateWebsiteAiAssessment implements ShouldBeUnique, ShouldQueue
 
     public function __construct(public int $scanId)
     {
-        $this->timeout = max(300, ((int) config('maxguard.ai.timeout_seconds', 90) * 3) + 60);
+        $requestTimeout = (int) config('maxguard.ai.timeout_seconds', 90);
+        if ((string) config('maxguard.ai.provider') === 'anthropic') {
+            $requestTimeout = max($requestTimeout, (int) config('maxguard.ai.anthropic_timeout_seconds', 300));
+        }
+        $this->timeout = max(300, $requestTimeout + 60);
         $this->uniqueFor = $this->timeout * $this->tries + 600;
     }
 

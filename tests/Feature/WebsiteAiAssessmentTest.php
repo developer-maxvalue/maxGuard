@@ -209,22 +209,28 @@ final class WebsiteAiAssessmentTest extends TestCase
             'maxguard.ai.base_url' => 'https://api.anthropic.test/v1',
             'maxguard.ai.model' => 'claude-test-model',
             'maxguard.ai.output_language' => 'Vietnamese',
+            'maxguard.ai.timeout_seconds' => 120,
+            'maxguard.ai.anthropic_timeout_seconds' => 300,
+            'maxguard.ai.anthropic_max_output_tokens' => 6000,
         ]);
         Http::fake([
             'https://api.anthropic.test/v1/messages' => Http::response([
                 'id' => 'msg_review_1',
-                'content' => [['type' => 'text', 'text' => json_encode([
-                    'risk_level' => 'healthy',
-                    'headline' => 'Chưa phát hiện rủi ro lớn',
-                    'summary' => 'Dữ liệu quét hiện tại chưa có tín hiệu đáng kể.',
-                    'content_overview' => 'Chưa phát hiện tín hiệu nội dung đáng kể.',
-                    'transparency_overview' => 'Chưa đủ dữ liệu để kết luận.',
-                    'adsense_requirements_overview' => 'Cần tiếp tục theo dõi.',
-                    'policy_overview' => 'Không có finding chính sách đang mở.',
-                    'policy_references' => [],
-                    'recommendations' => [],
-                    'limitations' => [],
-                ], JSON_UNESCAPED_UNICODE)]],
+                'content' => [
+                    ['type' => 'thinking', 'thinking' => 'Internal reasoning block'],
+                    ['type' => 'text', 'text' => json_encode([
+                        'risk_level' => 'healthy',
+                        'headline' => 'Chưa phát hiện rủi ro lớn',
+                        'summary' => 'Dữ liệu quét hiện tại chưa có tín hiệu đáng kể.',
+                        'content_overview' => 'Chưa phát hiện tín hiệu nội dung đáng kể.',
+                        'transparency_overview' => 'Chưa đủ dữ liệu để kết luận.',
+                        'adsense_requirements_overview' => 'Cần tiếp tục theo dõi.',
+                        'policy_overview' => 'Không có finding chính sách đang mở.',
+                        'policy_references' => [],
+                        'recommendations' => [],
+                        'limitations' => [],
+                    ], JSON_UNESCAPED_UNICODE)],
+                ],
                 'usage' => ['input_tokens' => 50, 'output_tokens' => 20],
             ]),
         ]);
@@ -252,6 +258,7 @@ final class WebsiteAiAssessmentTest extends TestCase
         app(\App\Services\WebsiteAiReviewer::class)->reviewAndStore($scan);
 
         $this->assertSame('anthropic', $scan->fresh()->ai_assessment['provider']);
+        $this->assertSame(360, (new GenerateWebsiteAiAssessment($scan->id))->timeout);
         Http::assertSent(function ($request): bool {
             $schema = json_encode(data_get($request->data(), 'output_config.format.schema'));
 
@@ -259,6 +266,7 @@ final class WebsiteAiAssessmentTest extends TestCase
                 && $request->hasHeader('x-api-key', 'anthropic-test-key')
                 && $request->hasHeader('anthropic-version', '2023-06-01')
                 && data_get($request->data(), 'output_config.format.type') === 'json_schema'
+                && $request['max_tokens'] === 6000
                 && ! array_key_exists('temperature', $request->data())
                 && ! str_contains((string) $schema, 'maxItems');
         });

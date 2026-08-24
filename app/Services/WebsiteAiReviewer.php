@@ -486,10 +486,18 @@ SQL)->first();
             JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE
         );
         $baseUrl = rtrim((string) config('maxguard.ai.base_url'), '/');
+        $timeout = $provider === 'anthropic'
+            ? max(
+                (int) config('maxguard.ai.timeout_seconds', 90),
+                (int) config('maxguard.ai.anthropic_timeout_seconds', 300),
+            )
+            : (int) config('maxguard.ai.timeout_seconds', 90);
         $request = Http::acceptJson()->asJson()
             ->connectTimeout((int) config('maxguard.ai.connect_timeout_seconds', 10))
-            ->timeout((int) config('maxguard.ai.timeout_seconds', 90))
-            ->retry(2, 750, fn (Throwable $error): bool => $error instanceof ConnectionException, false);
+            ->timeout($timeout);
+        if ($provider !== 'anthropic') {
+            $request = $request->retry(2, 750, fn (Throwable $error): bool => $error instanceof ConnectionException, false);
+        }
         // Gemini Developer API authenticates with the `key` query parameter.
         // Sending the same API key as a Bearer token makes Google interpret it
         // as an OAuth credential and returns "API keys are not supported".
@@ -519,7 +527,10 @@ SQL)->first();
         } elseif ($provider === 'anthropic') {
             $response = $request->post($baseUrl.'/messages', [
                 'model' => $model,
-                'max_tokens' => max(1200, (int) config('maxguard.ai.max_output_tokens', 3000)),
+                'max_tokens' => max(
+                    (int) config('maxguard.ai.max_output_tokens', 3000),
+                    (int) config('maxguard.ai.anthropic_max_output_tokens', 6000),
+                ),
                 'system' => $system,
                 'messages' => [['role' => 'user', 'content' => $user]],
                 'output_config' => [
@@ -529,7 +540,7 @@ SQL)->first();
                     ],
                 ],
             ]);
-            $text = $response->successful() ? data_get($response->json(), 'content.0.text') : null;
+            $text = $response->successful() ? $this->anthropicOutputText((array) $response->json()) : null;
         } elseif ($provider === 'ollama') {
             $response = $request->post($baseUrl.'/api/chat', [
                 'model' => $model,
@@ -564,6 +575,15 @@ SQL)->first();
             throw new RuntimeException('Dịch vụ AI trả về HTTP '.$response->status().': '.mb_substr($response->body(), 0, 500));
         }
         if (! is_string($text) || trim($text) === '') {
+            if ($provider === 'anthropic') {
+                $payload = (array) $response->json();
+                $blockTypes = collect((array) ($payload['content'] ?? []))
+                    ->pluck('type')->filter()->unique()->implode(', ');
+                throw new RuntimeException(
+                    'Phản hồi Anthropic không chứa block text JSON. stop_reason='.(string) ($payload['stop_reason'] ?? 'unknown')
+                    .'; content_blocks='.($blockTypes !== '' ? $blockTypes : 'none').'.'
+                );
+            }
             throw new RuntimeException('Phản hồi AI không chứa bản đánh giá JSON.');
         }
 
@@ -574,6 +594,21 @@ SQL)->first();
         }
 
         return is_array($decoded) ? $decoded : [];
+    }
+
+    /** @param array<string, mixed> $payload */
+    private function anthropicOutputText(array $payload): ?string
+    {
+        foreach ((array) ($payload['content'] ?? []) as $block) {
+            if (is_array($block)
+                && ($block['type'] ?? null) === 'text'
+                && is_string($block['text'] ?? null)
+                && trim($block['text']) !== '') {
+                return $block['text'];
+            }
+        }
+
+        return null;
     }
 
     private function systemPrompt(): string

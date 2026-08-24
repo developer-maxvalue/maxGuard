@@ -153,17 +153,23 @@ final class AiPolicyAnalyzer
     private function analyzeWithAnthropic(PageDocument $page, string $content, string $model): AiAnalysisOutcome
     {
         $baseUrl = rtrim((string) config('maxguard.ai.base_url', 'https://api.anthropic.com/v1'), '/');
+        $timeout = max(
+            (int) config('maxguard.ai.timeout_seconds', 90),
+            (int) config('maxguard.ai.anthropic_timeout_seconds', 300),
+        );
         $response = Http::acceptJson()->asJson()
             ->withHeaders([
                 'x-api-key' => (string) config('maxguard.ai.api_key'),
                 'anthropic-version' => '2023-06-01',
             ])
             ->connectTimeout((int) config('maxguard.ai.connect_timeout_seconds', 10))
-            ->timeout((int) config('maxguard.ai.timeout_seconds', 90))
-            ->retry(2, 750, fn (Throwable $error): bool => $error instanceof ConnectionException, false)
+            ->timeout($timeout)
             ->post($baseUrl.'/messages', [
                 'model' => $model,
-                'max_tokens' => max(500, (int) config('maxguard.ai.max_output_tokens', 1800)),
+                'max_tokens' => max(
+                    (int) config('maxguard.ai.max_output_tokens', 1800),
+                    (int) config('maxguard.ai.anthropic_max_output_tokens', 6000),
+                ),
                 'system' => $this->systemPrompt(),
                 'messages' => [['role' => 'user', 'content' => $this->pagePrompt($page, $content)]],
                 'output_config' => [
@@ -184,9 +190,18 @@ final class AiPolicyAnalyzer
         }
 
         $payload = (array) $response->json();
-        $text = data_get($payload, 'content.0.text');
+        $text = $this->anthropicOutputText($payload);
         if (! is_string($text)) {
-            return new AiAnalysisOutcome(true, model: $model, error: 'Phản hồi Anthropic không chứa JSON có cấu trúc.');
+            $blockTypes = collect((array) ($payload['content'] ?? []))
+                ->pluck('type')->filter()->unique()->implode(', ');
+
+            return new AiAnalysisOutcome(
+                true,
+                model: $model,
+                responseId: is_string($payload['id'] ?? null) ? $payload['id'] : null,
+                error: 'Phản hồi Anthropic không chứa block text JSON. stop_reason='.(string) ($payload['stop_reason'] ?? 'unknown')
+                    .'; content_blocks='.($blockTypes !== '' ? $blockTypes : 'none').'.',
+            );
         }
         $analysis = json_decode($text, true, 512, JSON_THROW_ON_ERROR);
         $responseId = is_string($payload['id'] ?? null) ? $payload['id'] : null;
@@ -199,6 +214,21 @@ final class AiPolicyAnalyzer
             inputTokens: (int) data_get($payload, 'usage.input_tokens', 0),
             outputTokens: (int) data_get($payload, 'usage.output_tokens', 0),
         );
+    }
+
+    /** @param array<string, mixed> $payload */
+    private function anthropicOutputText(array $payload): ?string
+    {
+        foreach ((array) ($payload['content'] ?? []) as $block) {
+            if (is_array($block)
+                && ($block['type'] ?? null) === 'text'
+                && is_string($block['text'] ?? null)
+                && trim($block['text']) !== '') {
+                return $block['text'];
+            }
+        }
+
+        return null;
     }
 
     /** Call Gemini using JSON response mode and convert it to standard findings. */

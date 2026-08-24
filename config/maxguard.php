@@ -62,6 +62,9 @@ return [
         'min_confidence' => (int) env('MAXGUARD_AI_MIN_CONFIDENCE', 70),
         'connect_timeout_seconds' => (int) env('MAXGUARD_AI_CONNECT_TIMEOUT', 10),
         'timeout_seconds' => (int) env('MAXGUARD_AI_TIMEOUT', 90),
+        // Anthropic may need extra time to compile a new Structured Outputs schema.
+        'anthropic_timeout_seconds' => (int) env('MAXGUARD_ANTHROPIC_TIMEOUT', 300),
+        'anthropic_max_output_tokens' => (int) env('MAXGUARD_ANTHROPIC_MAX_OUTPUT_TOKENS', 6000),
     ],
 
     'sightengine' => [

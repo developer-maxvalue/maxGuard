@@ -79,7 +79,10 @@ final class AiProviderAdaptersTest extends TestCase
         Http::fake([
             'https://api.anthropic.test/v1/messages' => Http::response([
                 'id' => 'msg_test',
-                'content' => [['type' => 'text', 'text' => json_encode(['findings' => []], JSON_THROW_ON_ERROR)]],
+                'content' => [
+                    ['type' => 'thinking', 'thinking' => 'Internal reasoning block'],
+                    ['type' => 'text', 'text' => json_encode(['findings' => []], JSON_THROW_ON_ERROR)],
+                ],
                 'usage' => ['input_tokens' => 42, 'output_tokens' => 9],
             ]),
         ]);
@@ -98,6 +101,7 @@ final class AiProviderAdaptersTest extends TestCase
                 && $request->hasHeader('anthropic-version', '2023-06-01')
                 && data_get($request->data(), 'output_config.format.type') === 'json_schema'
                 && data_get($request->data(), 'messages.0.role') === 'user'
+                && $request['max_tokens'] === 6000
                 && ! array_key_exists('temperature', $request->data())
                 && ! str_contains((string) $schema, 'maxItems')
                 && ! str_contains((string) $schema, 'minimum')
