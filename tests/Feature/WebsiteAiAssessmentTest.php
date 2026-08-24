@@ -56,10 +56,19 @@ final class WebsiteAiAssessmentTest extends TestCase
                     ]],
                     'key_issues' => [[
                         'title' => 'Mật độ quảng cáo cao',
+                        'root_cause' => 'Ad placement and density pattern',
                         'severity' => 'high',
                         'category' => 'Ad experience',
+                        'observation' => 'Nhiều vùng quảng cáo xuất hiện cạnh nội dung chính.',
+                        'risk_signal' => 'Bố cục có thể làm quảng cáo lấn át nội dung.',
                         'why_it_matters' => 'Có thể làm giảm giá trị nội dung và gây nhấp nhầm.',
                         'evidence' => 'Finding MG-TEST có confidence 91%.',
+                        'supporting_evidence' => ['8 vị trí quảng cáo trên URL mẫu'],
+                        'policy_area' => 'Ad experience',
+                        'confidence' => 91,
+                        'manual_verification' => 'Kiểm tra bố cục trên thiết bị thật trước khi xác nhận.',
+                        'alternative_explanation' => 'Một số vùng có thể là placeholder chưa hiển thị quảng cáo.',
+                        'alternative_assessment' => 'Finding trình duyệt vẫn khiến giả thuyết mật độ cao cần được kiểm tra.',
                         'example_urls' => ['https://publisher.example/article-with-too-many-ads'],
                         'policy_url' => 'https://support.google.com/adsense/answer/1346295?hl=vi',
                     ]],
@@ -157,6 +166,9 @@ final class WebsiteAiAssessmentTest extends TestCase
             ->assertSee('URL ví dụ:')
             ->assertSee('https://publisher.example/article-with-too-many-ads', false)
             ->assertSee('Ad experience')
+            ->assertSee('Root cause:')
+            ->assertSee('Alternative explanation:')
+            ->assertSee('Manual verification:')
             ->assertSee('https://support.google.com/adsense/answer/1346295?hl=vi', false)
             ->assertSeeInOrder([
                 'Các dấu hiệu rủi ro đáng chú ý',
@@ -178,6 +190,8 @@ final class WebsiteAiAssessmentTest extends TestCase
                 && str_contains($prompt, 'coverage_percent')
                 && str_contains($request->body(), 'policy_references')
                 && str_contains($prompt, 'adsense_policy_review_matrix')
+                && str_contains($request->body(), 'alternative_explanation')
+                && str_contains($prompt, 'semantic_comparison_samples')
                 && str_contains($prompt, 'https://publisher.example/article-with-too-many-ads')
                 && str_contains($prompt, 'Publisher identity, honesty and transparency');
         });

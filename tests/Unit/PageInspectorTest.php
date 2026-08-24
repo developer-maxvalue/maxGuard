@@ -55,9 +55,9 @@ final class PageInspectorTest extends TestCase
         <meta property="article:published_time" content="2026-08-24T08:00:00Z">
         </head><body>
         <h1>About us</h1>
-        <p>Our stories are 100% human-written. We never use AI and publish 100% original work with no plagiarism.</p>
-        <a href="https://www.harvard.edu/">Harvard</a>
-        <img src="https://cdn.example.org/yale-logo.png" alt="Yale logo">
+        <p>Our stories are 100% human-written by experts. We never use AI and publish 100% original work with no plagiarism.</p>
+        <section><h2>Trusted by</h2><a href="https://www.harvard.edu/"><img src="https://cdn.example.org/harvard-logo.png" alt="Harvard logo"></a></section>
+        <p>Our history article mentions Yale as an example.</p>
         </body></html>
         HTML;
 
@@ -68,6 +68,25 @@ final class PageInspectorTest extends TestCase
         $this->assertContains('human_written_claim', $page->meta['authorship_claims']);
         $this->assertContains('no_ai_claim', $page->meta['authorship_claims']);
         $this->assertContains('originality_claim', $page->meta['authorship_claims']);
+        $this->assertContains('expert_written_claim', $page->meta['authorship_claims']);
         $this->assertEqualsCanonicalizing(['harvard', 'yale'], $page->meta['institution_references']);
+        $this->assertSame('trust_claim', collect($page->meta['trust_context_signals'])->firstWhere('institution', 'harvard')['context_type']);
+        $this->assertNotEmpty($page->meta['content_structure']['signature']);
+        $this->assertNotEmpty($page->meta['analysis_excerpt']);
+    }
+
+    public function test_it_separates_editorial_mentions_and_sensitive_topic_presentation(): void
+    {
+        $html = <<<'HTML'
+        <html><head><title>Mental health resources at MIT</title></head><body>
+        <article><h1>Mental health resources at MIT</h1><p>This medical article discusses mental health support at MIT in a neutral educational context.</p></article>
+        </body></html>
+        HTML;
+
+        $page = (new PageInspector)->inspect(new CrawlResponse('https://example.com/mental-health-resources', 200, $html));
+
+        $this->assertSame('editorial_mention', collect($page->meta['trust_context_signals'])->firstWhere('institution', 'mit')['context_type']);
+        $this->assertContains('mental_health', $page->meta['sensitive_topics']);
+        $this->assertSame([], $page->meta['presentation_styles']);
     }
 }

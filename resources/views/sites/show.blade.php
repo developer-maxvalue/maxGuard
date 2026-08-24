@@ -154,11 +154,43 @@
                                     <strong class="fs-6">{{ $index + 1 }}. {{ $issue['title'] ?? 'Vấn đề cần xem xét' }}</strong>
                                     <x-status-badge :status="$issue['severity'] ?? 'review'" />
                                 </div>
-                                @if (!empty($issue['evidence']))
-                                    <p class="text-gray-700 mb-2"><strong>Dấu hiệu quan sát được:</strong> {{ $issue['evidence'] }}</p>
+                                @if (!empty($issue['root_cause']))
+                                    <p class="mb-2"><strong>Root cause:</strong> {{ $issue['root_cause'] }}</p>
+                                @endif
+                                @if (!empty($issue['observation']) || !empty($issue['evidence']))
+                                    <p class="text-gray-700 mb-2"><strong>Observation:</strong> {{ $issue['observation'] ?? $issue['evidence'] }}</p>
+                                @endif
+                                @if (!empty($issue['supporting_evidence']))
+                                    <div class="mb-2">
+                                        <strong class="d-block mb-1">Supporting evidence:</strong>
+                                        <ul class="mb-0 ps-5 text-gray-700">
+                                            @foreach ($issue['supporting_evidence'] as $supportingEvidence)
+                                                <li>{{ $supportingEvidence }}</li>
+                                            @endforeach
+                                        </ul>
+                                    </div>
+                                @endif
+                                @if (!empty($issue['risk_signal']))
+                                    <p class="text-gray-700 mb-2"><strong>Risk signal:</strong> {{ $issue['risk_signal'] }}</p>
                                 @endif
                                 @if (!empty($issue['why_it_matters']))
-                                    <p class="text-gray-700 mb-2"><strong>Nhận định và tác động:</strong> {{ $issue['why_it_matters'] }}</p>
+                                    <p class="text-gray-700 mb-2"><strong>Interpretation:</strong> {{ $issue['why_it_matters'] }}</p>
+                                @endif
+                                @if (!empty($issue['policy_area']) || isset($issue['confidence']))
+                                    <p class="text-gray-700 mb-2">
+                                        @if (!empty($issue['policy_area']))<strong>Relevant policy area:</strong> {{ $issue['policy_area'] }}@endif
+                                        @if (!empty($issue['policy_area']) && isset($issue['confidence'])) · @endif
+                                        @if (isset($issue['confidence']))<strong>Confidence:</strong> {{ $issue['confidence'] }}%@endif
+                                    </p>
+                                @endif
+                                @if (!empty($issue['alternative_explanation']))
+                                    <p class="text-gray-700 mb-2"><strong>Alternative explanation:</strong> {{ $issue['alternative_explanation'] }}</p>
+                                @endif
+                                @if (!empty($issue['alternative_assessment']))
+                                    <p class="text-gray-700 mb-2"><strong>Đánh giá giả thuyết thay thế:</strong> {{ $issue['alternative_assessment'] }}</p>
+                                @endif
+                                @if (!empty($issue['manual_verification']))
+                                    <p class="text-gray-700 mb-2"><strong>Manual verification:</strong> {{ $issue['manual_verification'] }}</p>
                                 @endif
                                 @if (!empty($issue['example_urls']))
                                     <div class="mb-2">
@@ -195,6 +227,34 @@
                         <strong class="d-block mb-2">Tính trung thực và minh bạch của nhà xuất bản</strong>
                         <p class="mb-0 text-gray-700">{{ $aiAssessment['transparency_overview'] }}</p>
                         @include('sites.partials.ai-policy-references', ['section' => 'transparency_overview'])
+                    </div>
+                @endif
+                @if (!empty($aiAssessment['claim_assessments']))
+                    <div class="border rounded p-4 mb-4">
+                        <strong class="d-block mb-3">Đối chiếu tuyên bố của nhà xuất bản</strong>
+                        <div class="d-flex flex-column gap-4">
+                            @foreach ($aiAssessment['claim_assessments'] as $claimAssessment)
+                                <div>
+                                    <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
+                                        <strong>{{ $claimAssessment['claim'] ?? $claimAssessment['claim_type'] ?? 'Publisher claim' }}</strong>
+                                        <span class="badge bg-light text-gray-800 border">{{ $claimAssessment['status'] ?? 'unknown' }}</span>
+                                        @if (isset($claimAssessment['confidence']))
+                                            <span class="text-muted fs-9">Confidence {{ $claimAssessment['confidence'] }}%</span>
+                                        @endif
+                                    </div>
+                                    @if (!empty($claimAssessment['observed_evidence']))
+                                        <p class="mb-1 text-gray-700"><strong>Observed behavior:</strong> {{ implode('; ', $claimAssessment['observed_evidence']) }}</p>
+                                    @endif
+                                    <p class="mb-1 text-gray-700">{{ $claimAssessment['interpretation'] ?? '' }}</p>
+                                    @foreach (array_slice((array) ($claimAssessment['source_urls'] ?? []), 0, 2) as $claimUrl)
+                                        <a class="d-block text-break fs-9" href="{{ $claimUrl }}" target="_blank" rel="noopener noreferrer">{{ $claimUrl }}</a>
+                                    @endforeach
+                                    @if (!empty($claimAssessment['manual_verification']))
+                                        <p class="mb-0 mt-1 text-muted fs-9">Manual verification: {{ $claimAssessment['manual_verification'] }}</p>
+                                    @endif
+                                </div>
+                            @endforeach
+                        </div>
                     </div>
                 @endif
                 @if (!empty($aiAssessment['adsense_requirements_overview']))

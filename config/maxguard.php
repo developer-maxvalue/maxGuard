@@ -56,7 +56,7 @@ return [
         'reasoning_effort' => env('MAXGUARD_AI_REASONING_EFFORT', 'low'),
         'output_language' => env('MAXGUARD_AI_OUTPUT_LANGUAGE', 'Vietnamese'),
         'max_input_chars' => (int) env('MAXGUARD_AI_MAX_INPUT_CHARS', 24_000),
-        'max_output_tokens' => (int) env('MAXGUARD_AI_MAX_OUTPUT_TOKENS', 3000),
+        'max_output_tokens' => (int) env('MAXGUARD_AI_MAX_OUTPUT_TOKENS', 5000),
         // 0 analyzes every crawled page. Keep a cap in production to control cost and scan duration.
         'max_pages_per_scan' => (int) env('MAXGUARD_AI_MAX_PAGES_PER_SCAN', 100),
         'min_confidence' => (int) env('MAXGUARD_AI_MIN_CONFIDENCE', 70),
