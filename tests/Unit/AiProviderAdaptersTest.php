@@ -98,6 +98,7 @@ final class AiProviderAdaptersTest extends TestCase
                 && $request->hasHeader('anthropic-version', '2023-06-01')
                 && data_get($request->data(), 'output_config.format.type') === 'json_schema'
                 && data_get($request->data(), 'messages.0.role') === 'user'
+                && ! array_key_exists('temperature', $request->data())
                 && ! str_contains((string) $schema, 'maxItems')
                 && ! str_contains((string) $schema, 'minimum')
                 && ! str_contains((string) $schema, 'maximum');

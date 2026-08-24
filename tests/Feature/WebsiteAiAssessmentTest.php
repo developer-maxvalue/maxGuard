@@ -238,6 +238,7 @@ final class WebsiteAiAssessmentTest extends TestCase
                 && $request->hasHeader('x-api-key', 'anthropic-test-key')
                 && $request->hasHeader('anthropic-version', '2023-06-01')
                 && data_get($request->data(), 'output_config.format.type') === 'json_schema'
+                && ! array_key_exists('temperature', $request->data())
                 && ! str_contains((string) $schema, 'maxItems');
         });
     }

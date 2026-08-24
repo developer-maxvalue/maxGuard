@@ -520,7 +520,6 @@ SQL)->first();
             $response = $request->post($baseUrl.'/messages', [
                 'model' => $model,
                 'max_tokens' => max(1200, (int) config('maxguard.ai.max_output_tokens', 3000)),
-                'temperature' => 0.1,
                 'system' => $system,
                 'messages' => [['role' => 'user', 'content' => $user]],
                 'output_config' => [

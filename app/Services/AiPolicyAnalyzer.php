@@ -164,7 +164,6 @@ final class AiPolicyAnalyzer
             ->post($baseUrl.'/messages', [
                 'model' => $model,
                 'max_tokens' => max(500, (int) config('maxguard.ai.max_output_tokens', 1800)),
-                'temperature' => 0.1,
                 'system' => $this->systemPrompt(),
                 'messages' => [['role' => 'user', 'content' => $this->pagePrompt($page, $content)]],
                 'output_config' => [
