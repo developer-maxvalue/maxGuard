@@ -77,7 +77,9 @@ final class AnthropicWebReviewer
         $tools = $this->tools($scan->website->domain);
         $messages = [[
             'role' => 'user',
-            'content' => $this->prompt($scan),
+            // The realtime reviewer receives only the public start URL. Crawler
+            // pages, findings and aggregates intentionally stay in their own flow.
+            'content' => $this->prompt((string) $scan->website->start_url),
         ]];
         $allContent = [];
         $usage = [];
@@ -95,7 +97,6 @@ final class AnthropicWebReviewer
                     'model' => (string) config('maxguard.review_ai.model'),
                     'max_tokens' => max(2000, (int) config('maxguard.review_ai.max_output_tokens', 8192)),
                     'thinking' => ['type' => 'disabled'],
-                    'effort' => 'low',
                     'system' => $this->systemPrompt(),
                     'messages' => $messages,
                     'tools' => $tools,
@@ -169,13 +170,13 @@ final class AnthropicWebReviewer
         ];
     }
 
-    private function prompt(Scan $scan): string
+    private function prompt(string $startUrl): string
     {
         $policies = collect(array_keys(UiText::findingCategories()))
             ->mapWithKeys(fn (string $category): array => [$category => GooglePolicyReference::url($category)])
             ->all();
 
-        return 'Kiểm tra cho tôi website '.$scan->website->start_url.' có dấu hiệu vi phạm chính sách kiếm tiền AdSense không? '
+        return 'Kiểm tra cho tôi website '.$startUrl.' có dấu hiệu vi phạm chính sách kiếm tiền AdSense không? '
             .'Hãy đọc realtime trang chủ, About/Disclaimer/Privacy/Terms nếu có và các bài viết đại diện, rồi viết một bản nhận định biên tập giống câu trả lời trên Claude Web. '
             .'Mỗi vấn đề phải giải thích cụ thể điều quan sát được và vì sao đáng lo, kèm 1-2 URL ví dụ ngay dưới vấn đề. '
             .'Chủ động đối chiếu lời cam kết công khai với bản chất nội dung; xem xét clickbait/misleading content, misrepresentation, scaled hoặc low-value content, mô-típ và cấu trúc lặp, tác giả dạng mã, mật độ xuất bản, cách chia chapter/next-part, trang chính sách mẫu và tín hiệu quảng cáo. '

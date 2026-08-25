@@ -330,7 +330,7 @@ final class WebsiteAiAssessmentTest extends TestCase
                 && $request->hasHeader('anthropic-version', '2023-06-01')
                 && data_get($request->data(), 'output_config.format.type') === 'json_schema'
                 && data_get($request->data(), 'thinking.type') === 'disabled'
-                && data_get($request->data(), 'effort') === 'low'
+                && ! array_key_exists('effort', $request->data())
                 && $request['max_tokens'] === 6000
                 && ! array_key_exists('temperature', $request->data())
                 && ! str_contains((string) $schema, 'maxItems');

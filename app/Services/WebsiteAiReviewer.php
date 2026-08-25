@@ -1009,7 +1009,6 @@ SQL)->first();
                     (int) config('maxguard.ai.anthropic_max_output_tokens', 6000),
                 ),
                 'thinking' => ['type' => 'disabled'],
-                'effort' => 'low',
                 'system' => $system,
                 'messages' => [['role' => 'user', 'content' => $user]],
                 'output_config' => [

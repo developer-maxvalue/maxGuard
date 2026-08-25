@@ -134,7 +134,7 @@ final class AnthropicWebReviewTest extends TestCase
                 && data_get($request->data(), 'tools.1.type') === 'web_fetch_20260318'
                 && data_get($request->data(), 'tools.1.citations.enabled') === true
                 && data_get($request->data(), 'thinking.type') === 'disabled'
-                && data_get($request->data(), 'effort') === 'low'
+                && ! array_key_exists('effort', $request->data())
                 && data_get($request->data(), 'output_config.format.type') === 'json_schema'
                 && in_array('conclusion', (array) data_get($request->data(), 'output_config.format.schema.required'), true)
                 && str_contains((string) data_get($request->data(), 'messages.0.content'), 'Kiểm tra cho tôi website')
