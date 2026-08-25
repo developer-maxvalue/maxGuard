@@ -64,12 +64,14 @@ final class GenerateWebsiteAiAssessment implements ShouldBeUnique, ShouldQueue
         // A manual assessment may target an older, already completed scan that
         // predates realtime review. Run Claude Web now instead of forcing the
         // user to crawl the website again.
-        if (! is_array(data_get($scan->meta, 'web_review')) && $configuration->isWebReviewReady()) {
+        $refreshWebReview = (bool) data_get($scan->meta, 'web_review_refresh_requested', false);
+        if (($refreshWebReview || ! is_array(data_get($scan->meta, 'web_review'))) && $configuration->isWebReviewReady()) {
             $this->updateMeta($scan, [
                 'web_review_status' => 'running',
                 'web_review_started_at' => now()->toIso8601String(),
                 'web_review_error' => null,
                 'web_review_failed_at' => null,
+                'web_review_refresh_requested' => false,
             ]);
 
             try {

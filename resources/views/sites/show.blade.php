@@ -140,6 +140,9 @@
         </div>
         <div class="card-body pt-1">
             @if ($aiAssessment)
+                @php
+                    $isClaudeWebAssessment = ($aiAssessment['assessment_source'] ?? null) === 'anthropic_web';
+                @endphp
                 <div class="d-flex align-items-start justify-content-between gap-4 flex-wrap mb-5">
                     <div>
                         <h3 class="fs-4 mb-0">{{ $aiAssessment['headline'] ?? 'Đánh giá tình trạng website' }}</h3>
@@ -161,15 +164,24 @@
                             <div class="border rounded p-4">
                                 <div class="d-flex align-items-start justify-content-between gap-3 mb-3">
                                     <strong class="fs-6">{{ $index + 1 }}. {{ $issue['title'] ?? 'Vấn đề cần xem xét' }}</strong>
-                                    <x-status-badge :status="$issue['severity'] ?? 'review'" />
+                                    @unless ($isClaudeWebAssessment)
+                                        <x-status-badge :status="$issue['severity'] ?? 'review'" />
+                                    @endunless
                                 </div>
-                                @if (!empty($issue['observation']) || !empty($issue['evidence']))
-                                    <p class="text-gray-700 mb-2">{{ $issue['observation'] ?? $issue['evidence'] }}</p>
+                                @if ($isClaudeWebAssessment)
+                                    <p class="text-gray-700 mb-3">
+                                        {{ $issue['observation'] ?? $issue['evidence'] ?? '' }}
+                                        @if (!empty($issue['why_it_matters'])) {{ $issue['why_it_matters'] }} @endif
+                                    </p>
+                                @else
+                                    @if (!empty($issue['observation']) || !empty($issue['evidence']))
+                                        <p class="text-gray-700 mb-2">{{ $issue['observation'] ?? $issue['evidence'] }}</p>
+                                    @endif
+                                    @if (!empty($issue['why_it_matters']))
+                                        <p class="text-gray-700 mb-3">{{ $issue['why_it_matters'] }}</p>
+                                    @endif
                                 @endif
-                                @if (!empty($issue['why_it_matters']))
-                                    <p class="text-gray-700 mb-3">{{ $issue['why_it_matters'] }}</p>
-                                @endif
-                                @if (!empty($issue['evidence_quotes']))
+                                @if (!$isClaudeWebAssessment && !empty($issue['evidence_quotes']))
                                     <div class="border-start border-3 border-primary ps-3 mb-3 text-gray-600 fs-8">
                                         @foreach (array_slice((array) $issue['evidence_quotes'], 0, 3) as $quote)
                                             <div class="mb-1">“{{ $quote }}”</div>
@@ -203,7 +215,7 @@
                                             };
                                     }
                                 @endphp
-                                @if ($issueCategory)
+                                @if (!$isClaudeWebAssessment && $issueCategory)
                                     <div class="fs-9 text-muted mt-2">
                                         <span>Danh mục:</span>
                                         <a href="{{ route('sites.show', $site['slug']) }}?finding_category={{ urlencode($issueCategory) }}#finding-report-filter">
@@ -252,7 +264,9 @@
                         </div>
                     </div>
                 @endif
-                @include('sites.partials.ai-policy-references', ['section' => null])
+                @unless ($isClaudeWebAssessment)
+                    @include('sites.partials.ai-policy-references', ['section' => null])
+                @endunless
 
                 @if (!empty($aiAssessment['no_clear_violation_signals']))
                     <div class="border rounded p-4 mb-4">
@@ -267,7 +281,7 @@
 
                 @if (!empty($aiAssessment['conclusion']) || !empty($aiAssessment['summary']))
                     <div class="border border-primary rounded p-4 mb-5 bg-light-primary">
-                        <strong class="d-block mb-2">Kết luận tổng hợp</strong>
+                        <strong class="d-block mb-2">{{ $isClaudeWebAssessment ? 'Tóm lại' : 'Kết luận tổng hợp' }}</strong>
                         <p class="mb-0 text-gray-800">{{ $aiAssessment['conclusion'] ?? $aiAssessment['summary'] }}</p>
                     </div>
                 @endif

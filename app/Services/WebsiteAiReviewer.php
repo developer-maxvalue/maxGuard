@@ -78,28 +78,13 @@ final class WebsiteAiReviewer
                     'citations' => (array) ($issue['citations'] ?? []),
                     'policy_area' => (string) ($issue['category'] ?? 'Publisher requirements'),
                     'confidence' => (int) ($issue['confidence'] ?? 50),
-                    'manual_verification' => 'Đối chiếu thêm quy trình biên tập và toàn bộ website trước khi kết luận vi phạm chính thức.',
-                    'alternative_explanation' => 'Mẫu quan sát được có thể xuất phát từ quy chuẩn biên tập hoặc cách tổ chức nội dung hợp lệ.',
-                    'alternative_assessment' => 'URL và trích dẫn là bằng chứng quan sát; kết luận cuối cùng vẫn cần kiểm tra thủ công.',
+                    'manual_verification' => '',
+                    'alternative_explanation' => '',
+                    'alternative_assessment' => '',
                     'example_urls' => (array) ($issue['example_urls'] ?? []),
                     'policy_url' => (string) ($issue['policy_url'] ?? ''),
                 ];
             })
-            ->values()
-            ->all();
-        $policyReferences = collect($issues)
-            ->filter(fn (array $issue): bool => filter_var($issue['policy_url'], FILTER_VALIDATE_URL) !== false)
-            ->map(fn (array $issue): array => [
-                'section' => in_array($issue['category'], ['Content quality', 'Duplicate content', 'Copyright'], true)
-                    ? 'content_overview'
-                    : (in_array($issue['category'], ['Deceptive practices', 'Publisher requirements'], true)
-                        ? 'transparency_overview'
-                        : 'policy_overview'),
-                'issue' => $issue['title'],
-                'relevance' => $issue['why_it_matters'],
-                'policy_url' => $issue['policy_url'],
-            ])
-            ->unique('policy_url')
             ->values()
             ->all();
 
@@ -114,7 +99,10 @@ final class WebsiteAiReviewer
             'policy_overview' => (string) ($review['summary'] ?? ''),
             'no_clear_violation_signals' => [],
             'conclusion' => (string) ($review['conclusion'] ?? $review['summary'] ?? ''),
-            'policy_references' => $policyReferences,
+            // The realtime Claude report already links examples below each
+            // issue. Keep policy metadata on Findings without repeating a
+            // second, audit-style policy section in the editorial summary.
+            'policy_references' => [],
         ];
     }
 

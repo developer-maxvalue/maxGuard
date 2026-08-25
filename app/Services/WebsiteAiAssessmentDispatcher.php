@@ -8,6 +8,8 @@ use Throwable;
 
 final class WebsiteAiAssessmentDispatcher
 {
+    public function __construct(private readonly AiConfiguration $configuration) {}
+
     public function dispatch(Scan $scan, string $source = 'automatic'): bool
     {
         $status = (string) data_get($scan->meta, 'ai_assessment_status', '');
@@ -22,6 +24,9 @@ final class WebsiteAiAssessmentDispatcher
             'ai_assessment_error' => null,
             'ai_assessment_failed_at' => null,
         ]);
+        if ($source === 'manual' && $this->configuration->isWebReviewReady()) {
+            $meta['web_review_refresh_requested'] = true;
+        }
         $scan->update(['meta' => $meta]);
 
         try {

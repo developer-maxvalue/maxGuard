@@ -143,7 +143,9 @@ final class AnthropicWebReviewTest extends TestCase
                 && data_get($request->data(), 'output_config.format.type') === 'json_schema'
                 && in_array('conclusion', (array) data_get($request->data(), 'output_config.format.schema.required'), true)
                 && str_contains((string) data_get($request->data(), 'messages.0.content'), 'Kiểm tra cho tôi website')
-                && str_contains((string) data_get($request->data(), 'messages.0.content'), '1-2 URL');
+                && str_contains((string) data_get($request->data(), 'messages.0.content'), '1-2 URL')
+                && str_contains((string) data_get($request->data(), 'system'), 'not like a forensic audit')
+                && str_contains((string) data_get($request->data(), 'system'), '3-5 strongest distinct issues');
         });
         Http::assertSentCount(1);
     }
@@ -183,6 +185,7 @@ final class AnthropicWebReviewTest extends TestCase
 
         Queue::assertPushed(GenerateWebsiteAiAssessment::class, fn (GenerateWebsiteAiAssessment $job): bool => $job->scanId === $scan->id);
         $this->assertSame('queued', data_get($scan->fresh()->meta, 'ai_assessment_status'));
+        $this->assertTrue((bool) data_get($scan->fresh()->meta, 'web_review_refresh_requested'));
     }
 
     private function configureAnthropic(): void
