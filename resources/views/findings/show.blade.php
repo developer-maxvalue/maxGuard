@@ -86,6 +86,29 @@
                 </div>
             @endif
 
+            @if (!empty($finding['citations']))
+                <div class="card mg-card mb-5">
+                    <div class="card-header border-0 pt-2">
+                        <div class="card-title d-block">
+                            <h2 class="mg-card-title">Nguồn Claude Web đã đọc</h2>
+                            <p class="mg-card-subtitle">Liên kết và đoạn trích dẫn được dùng làm bằng chứng cho tín hiệu này.</p>
+                        </div>
+                    </div>
+                    <div class="card-body pt-1">
+                        @foreach ($finding['citations'] as $citation)
+                            <div class="border rounded p-4 mb-3">
+                                <a class="d-block text-break fw-semibold" href="{{ $citation['url'] }}" target="_blank" rel="noopener noreferrer">
+                                    {{ $citation['title'] ?: $citation['url'] }} <i class="bi bi-box-arrow-up-right ms-1"></i>
+                                </a>
+                                @if ($citation['cited_text'])
+                                    <blockquote class="border-start border-3 border-primary ps-3 mt-3 mb-0 text-gray-700">{{ $citation['cited_text'] }}</blockquote>
+                                @endif
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            @endif
+
         </div>
 
         <div class="col-xl-4">

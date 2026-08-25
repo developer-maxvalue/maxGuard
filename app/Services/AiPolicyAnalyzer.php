@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Data\AiAnalysisOutcome;
 use App\Data\DetectorResult;
 use App\Data\PageDocument;
+use App\Support\AiJsonDecoder;
 use App\Support\AnthropicJsonSchema;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Cache;
@@ -203,7 +204,7 @@ final class AiPolicyAnalyzer
                     .'; content_blocks='.($blockTypes !== '' ? $blockTypes : 'none').'.',
             );
         }
-        $analysis = json_decode($text, true, 512, JSON_THROW_ON_ERROR);
+        $analysis = AiJsonDecoder::decodeObject($text);
         $responseId = is_string($payload['id'] ?? null) ? $payload['id'] : null;
 
         return new AiAnalysisOutcome(

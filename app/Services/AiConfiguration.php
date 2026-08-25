@@ -12,6 +12,7 @@ final class AiConfiguration
     public function apply(): array
     {
         $values = $this->legacyValues();
+        $reviewValues = $this->legacyReviewValues();
 
         try {
             if (Schema::hasTable('ai_settings')) {
@@ -32,6 +33,31 @@ final class AiConfiguration
                         'timeout_seconds' => $setting->timeout_seconds,
                         'source' => 'database',
                     ];
+                    if (Schema::hasColumn('ai_settings', 'review_enabled')) {
+                        $reviewValues = [
+                            'enabled' => $setting->review_enabled,
+                            'provider' => $setting->review_provider ?: 'anthropic',
+                            'base_url' => rtrim($setting->review_base_url ?: self::defaultBaseUrl('anthropic'), '/'),
+                            'api_key' => $setting->review_api_key,
+                            'model' => $setting->review_model ?: self::defaultModel('anthropic'),
+                            'connect_timeout_seconds' => (int) config('maxguard.review_ai.connect_timeout_seconds', 10),
+                            'timeout_seconds' => (int) config('maxguard.review_ai.timeout_seconds', 300),
+                            'max_output_tokens' => (int) config('maxguard.review_ai.max_output_tokens', 8192),
+                            'source' => 'database',
+                        ];
+                    } elseif ($setting->provider === 'anthropic') {
+                        $reviewValues = [
+                            'enabled' => $setting->enabled,
+                            'provider' => 'anthropic',
+                            'base_url' => rtrim($setting->base_url, '/'),
+                            'api_key' => $setting->api_key,
+                            'model' => $setting->model,
+                            'connect_timeout_seconds' => $setting->connect_timeout_seconds,
+                            'timeout_seconds' => max(300, $setting->timeout_seconds),
+                            'max_output_tokens' => max(2000, $setting->max_output_tokens),
+                            'source' => 'database_legacy',
+                        ];
+                    }
                 }
             }
         } catch (Throwable) {
@@ -52,7 +78,18 @@ final class AiConfiguration
             'maxguard.ai.max_output_tokens' => (int) $values['max_output_tokens'],
             'maxguard.ai.connect_timeout_seconds' => (int) $values['connect_timeout_seconds'],
             'maxguard.ai.timeout_seconds' => (int) $values['timeout_seconds'],
+            'maxguard.review_ai.enabled' => (bool) $reviewValues['enabled'],
+            'maxguard.review_ai.provider' => (string) $reviewValues['provider'],
+            'maxguard.review_ai.api_key' => $reviewValues['api_key'],
+            'maxguard.review_ai.base_url' => (string) $reviewValues['base_url'],
+            'maxguard.review_ai.model' => (string) $reviewValues['model'],
+            'maxguard.review_ai.connect_timeout_seconds' => (int) $reviewValues['connect_timeout_seconds'],
+            'maxguard.review_ai.timeout_seconds' => (int) $reviewValues['timeout_seconds'],
+            'maxguard.review_ai.max_output_tokens' => (int) $reviewValues['max_output_tokens'],
+            'maxguard.web_review.enabled' => (bool) $reviewValues['enabled'],
         ]);
+
+        $values['review'] = $reviewValues;
 
         return $values;
     }
@@ -60,12 +97,29 @@ final class AiConfiguration
     public function isReady(): bool
     {
         $values = $this->apply();
-        $keyRequired = in_array($values['provider'], ['gemini', 'anthropic', 'openai'], true);
+        $keyRequired = in_array($values['provider'], ['gemini', 'anthropic', 'openai', 'openai_compatible'], true);
 
         return (bool) $values['enabled']
             && filled($values['base_url'])
             && filled($values['model'])
             && (! $keyRequired || filled($values['api_key']));
+    }
+
+    public function isWebReviewReady(): bool
+    {
+        $values = $this->apply()['review'];
+        $keyRequired = in_array($values['provider'], ['gemini', 'anthropic', 'openai', 'openai_compatible'], true);
+
+        return (bool) $values['enabled']
+            && $values['provider'] === 'anthropic'
+            && filled($values['base_url'])
+            && filled($values['model'])
+            && (! $keyRequired || filled($values['api_key']));
+    }
+
+    public function anyReady(): bool
+    {
+        return $this->isReady() || $this->isWebReviewReady();
     }
 
     /** @return array<string, mixed> */
@@ -77,6 +131,8 @@ final class AiConfiguration
         }
         $values['has_api_key'] = filled($values['api_key']);
         unset($values['api_key']);
+        $values['review']['has_api_key'] = filled($values['review']['api_key']);
+        unset($values['review']['api_key']);
 
         return $values;
     }
@@ -123,6 +179,24 @@ final class AiConfiguration
             'max_output_tokens' => (int) config('maxguard.ai.max_output_tokens', 1800),
             'connect_timeout_seconds' => (int) config('maxguard.ai.connect_timeout_seconds', 10),
             'timeout_seconds' => (int) config('maxguard.ai.timeout_seconds', 90),
+            'source' => 'environment',
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function legacyReviewValues(): array
+    {
+        $provider = (string) config('maxguard.review_ai.provider', 'anthropic');
+
+        return [
+            'enabled' => (bool) config('maxguard.review_ai.enabled', false),
+            'provider' => $provider,
+            'base_url' => rtrim((string) config('maxguard.review_ai.base_url', self::defaultBaseUrl($provider)), '/'),
+            'api_key' => config('maxguard.review_ai.api_key'),
+            'model' => (string) config('maxguard.review_ai.model', self::defaultModel($provider)),
+            'connect_timeout_seconds' => (int) config('maxguard.review_ai.connect_timeout_seconds', 10),
+            'timeout_seconds' => (int) config('maxguard.review_ai.timeout_seconds', 300),
+            'max_output_tokens' => (int) config('maxguard.review_ai.max_output_tokens', 8192),
             'source' => 'environment',
         ];
     }

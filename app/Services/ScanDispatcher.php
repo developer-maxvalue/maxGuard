@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Jobs\RunAnthropicWebReview;
 use App\Jobs\RunWebsiteScan;
 use App\Models\Scan;
 use App\Models\Website;
@@ -27,6 +28,7 @@ final class ScanDispatcher
         bool $forceRescan = false,
     ): Scan {
         $aiConfiguration = app(AiConfiguration::class);
+        $aiConfiguration->apply();
         if (! in_array($type, ['full', 'priority', 'copyright', 'ads', 'privacy'], true)) {
             throw ValidationException::withMessages(['scan_type' => 'Unsupported scan type.']);
         }
@@ -35,14 +37,17 @@ final class ScanDispatcher
         if ($maxUrls !== null && ($maxUrls < 1 || $maxUrls > $safetyLimit)) {
             throw ValidationException::withMessages(['max_urls' => "Maximum newest posts must be between 1 and {$safetyLimit}."]);
         }
-        if ($useAi && ! $aiConfiguration->isReady()) {
+        if ($useAi && ! $aiConfiguration->anyReady()) {
             throw ValidationException::withMessages([
                 'use_ai' => 'AI chưa được cấu hình. Hãy mở Quản trị → Cài đặt AI để thiết lập kết nối.',
             ]);
         }
 
+        $runWebReview = $useAi
+            && $aiConfiguration->isWebReviewReady()
+            && (bool) config('maxguard.web_review.enabled', true);
         $previousStatus = $website->status;
-        $scan = DB::transaction(function () use ($website, $type, $requestedBy, $maxUrls, $useAi, $forceRescan, &$previousStatus): Scan {
+        $scan = DB::transaction(function () use ($website, $type, $requestedBy, $maxUrls, $useAi, $forceRescan, $runWebReview, &$previousStatus): Scan {
             $locked = Website::query()->lockForUpdate()->findOrFail($website->id);
             $previousStatus = $locked->status;
             if ($locked->status === 'disabled') {
@@ -61,6 +66,10 @@ final class ScanDispatcher
                 'use_ai' => $useAi,
                 'force_rescan' => $forceRescan,
                 'ruleset_version' => '1.5.0',
+                'meta' => $runWebReview ? [
+                    'web_review_status' => 'queued',
+                    'web_review_queued_at' => now()->toIso8601String(),
+                ] : [],
             ]);
 
             $locked->update(['status' => 'scanning']);
@@ -84,6 +93,21 @@ final class ScanDispatcher
             throw ValidationException::withMessages([
                 'queue' => 'The scan could not be added to the queue. Run [php artisan maxguard:queue-doctor] and check the queue worker.',
             ]);
+        }
+
+        if ($runWebReview) {
+            try {
+                RunAnthropicWebReview::dispatch($scan->id)
+                    ->onQueue((string) config('maxguard.web_review.queue', config('maxguard.queue', 'scans')))
+                    ->afterCommit();
+            } catch (Throwable $exception) {
+                report($exception);
+                app(AnthropicWebReviewer::class)->mergeMeta($scan->id, [
+                    'web_review_status' => 'failed',
+                    'web_review_error' => mb_substr($exception->getMessage(), 0, 1000),
+                    'web_review_failed_at' => now()->toIso8601String(),
+                ]);
+            }
         }
 
         return $scan;

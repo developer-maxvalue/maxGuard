@@ -79,7 +79,10 @@ final class WebsiteAiReviewerPatternTest extends TestCase
         $assessment = $assessmentMethod->invoke(new WebsiteAiReviewer, [
             'risk_level' => 'healthy',
             'content_overview' => 'Tổng quan ban đầu.',
-            'key_issues' => [],
+            'key_issues' => array_map(
+                fn (int $number): array => ['title' => "AI issue {$number}"],
+                range(1, 6),
+            ),
             'policy_references' => [],
         ], [
             'whole_site_page_profile' => ['content_pattern_evidence' => $assessmentEvidence],
@@ -87,7 +90,7 @@ final class WebsiteAiReviewerPatternTest extends TestCase
 
         $this->assertSame('high', $assessment['risk_level']);
         $this->assertContains('Mô hình nội dung sản xuất hàng loạt cần được xem xét', array_column($assessment['key_issues'], 'title'));
-        $this->assertContains('Tuyên bố tuyệt đối về tác giả và tính nguyên bản cần được xác minh', array_column($assessment['key_issues'], 'title'));
+        $this->assertContains('Mâu thuẫn tín hiệu giữa lời cam kết và thực tế nội dung', array_column($assessment['key_issues'], 'title'));
         $this->assertContains('Potential misleading trust signal – manual verification required', array_column($assessment['key_issues'], 'title'));
         $this->assertStringContainsString('scaled/low-value content', $assessment['content_overview']);
         $this->assertStringContainsString('tuyên bố tuyệt đối', $assessment['transparency_overview']);
@@ -96,6 +99,11 @@ final class WebsiteAiReviewerPatternTest extends TestCase
         $this->assertSame('Content quality', $scaledIssue['category']);
         $this->assertCount(2, $scaledIssue['example_urls']);
         $this->assertSame('https://support.google.com/adsense/answer/81904?hl=vi', $scaledIssue['policy_url']);
+        $claimIssue = collect($assessment['key_issues'])->firstWhere('title', 'Mâu thuẫn tín hiệu giữa lời cam kết và thực tế nội dung');
+        $this->assertSame('high', $claimIssue['severity']);
+        $this->assertStringContainsString('12 tiêu đề', $claimIssue['observation']);
+        $this->assertStringContainsString('review thủ công', $claimIssue['why_it_matters']);
+        $this->assertCount(2, $claimIssue['example_urls']);
         $this->assertSame('questionable', collect($assessment['claim_assessments'])->firstWhere('claim_type', 'no_ai_claim')['status']);
     }
 

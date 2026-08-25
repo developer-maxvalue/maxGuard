@@ -51,7 +51,7 @@ final class GenerateWebsiteAiAssessment implements ShouldBeUnique, ShouldQueue
         if (! in_array($scan->status, [Scan::STATUS_COMPLETED, Scan::STATUS_PARTIAL], true)) {
             return;
         }
-        if (! $configuration->isReady()) {
+        if (! is_array(data_get($scan->meta, 'web_review')) && ! $configuration->isReady()) {
             throw new RuntimeException('AI chưa được cấu hình hoặc đã bị tắt.');
         }
 

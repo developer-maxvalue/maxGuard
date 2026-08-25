@@ -206,6 +206,14 @@ final class ScanRunner
             return false;
         }
 
+        $scan->refresh();
+        if (in_array((string) data_get($scan->meta, 'web_review_status'), ['queued', 'running', 'retrying'], true)) {
+            $this->refreshParallelProgress($scan->id);
+
+            return false;
+        }
+        app(AnthropicWebReviewer::class)->reconcilePages($scan);
+
         $successfulTargets = $scan->targets()
             ->with('page')
             ->whereIn('status', [ScanTarget::STATUS_COMPLETED, ScanTarget::STATUS_REUSED])
@@ -1266,7 +1274,18 @@ final class ScanRunner
 
     private function generateSiteAssessment(Scan $scan): void
     {
-        if (! app(AiConfiguration::class)->isReady()) {
+        $configuration = app(AiConfiguration::class);
+        if (! $configuration->anyReady()) {
+            return;
+        }
+        if ($configuration->isWebReviewReady() && ! is_array(data_get($scan->meta, 'web_review'))) {
+            $webError = (string) data_get($scan->meta, 'web_review_error', 'Claude Web không trả về báo cáo realtime.');
+            $scan->update(['meta' => array_merge((array) $scan->meta, [
+                'ai_assessment_status' => 'failed',
+                'ai_assessment_error' => 'Không tạo bản tổng hợp từ crawler vì Claude Web đang được bật nhưng thất bại: '.$webError,
+                'ai_assessment_failed_at' => now()->toIso8601String(),
+            ])]);
+
             return;
         }
 

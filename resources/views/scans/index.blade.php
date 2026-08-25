@@ -68,12 +68,22 @@
                                 <label class="form-check form-switch form-check-custom form-check-solid mt-3">
                                     <input class="form-check-input" type="checkbox" name="use_ai" value="1"
                                         @checked((bool) old('use_ai', $aiInfo['ready'])) @disabled(!$aiInfo['ready'])>
-                                    <span class="form-check-label fw-semibold">Phân tích ý nghĩa trang bằng
-                                        {{ $aiInfo['model'] }}</span>
+                                    <span class="form-check-label fw-semibold">
+                                        @if ($aiInfo['page_ready'] && $aiInfo['review_ready'])
+                                            AI song song: {{ $aiInfo['page_model'] }} theo URL + {{ $aiInfo['review_model'] }} realtime
+                                        @elseif ($aiInfo['review_ready'])
+                                            Đánh giá realtime bằng {{ $aiInfo['review_model'] }}
+                                        @else
+                                            Phân tích từng URL bằng {{ $aiInfo['page_model'] }}
+                                        @endif
+                                    </span>
                                 </label>
                                 @if ($aiInfo['ready'])
-                                    <div class="form-text">Giới hạn an toàn AI:
-                                        {{ $aiInfo['page_limit'] === 0 ? 'tất cả trang đã thu thập' : number_format($aiInfo['page_limit']) . ' trang mỗi lượt quét' }}.
+                                    <div class="form-text">
+                                        @if ($aiInfo['page_ready'])
+                                            AI từng URL: {{ $aiInfo['page_limit'] === 0 ? 'tất cả trang đã thu thập' : number_format($aiInfo['page_limit']) . ' trang mỗi lượt quét' }}.
+                                        @endif
+                                        @if ($aiInfo['review_ready']) Claude Web chạy song song và đọc website realtime. @endif
                                     </div>
                                 @else
                                     <div class="form-text text-warning">AI chưa sẵn sàng.

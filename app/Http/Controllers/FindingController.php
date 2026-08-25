@@ -68,8 +68,8 @@ final class FindingController extends Controller
                         $finding->public_id,
                         (string) $finding->scan_id,
                         $finding->website->domain,
-                        $finding->page?->url ?? $finding->website->start_url,
-                        str_starts_with($finding->rule_key, 'ai.') ? 'AI' : 'Quy tắc',
+                        $this->findingUrl($finding),
+                        $this->findingSource($finding),
                         $finding->rule_key,
                         UiText::label($finding->category),
                         UiText::label($finding->severity),
@@ -128,13 +128,26 @@ final class FindingController extends Controller
                 'method' => (string) ($rawSignals['method'] ?? ''),
             ];
         }
+        $citations = collect((array) ($rawSignals['citations'] ?? []))
+            ->filter(fn ($citation): bool => is_array($citation))
+            ->filter(fn (array $citation): bool => filter_var($citation['url'] ?? null, FILTER_VALIDATE_URL) !== false)
+            ->map(fn (array $citation): array => [
+                'url' => (string) $citation['url'],
+                'title' => trim((string) ($citation['title'] ?? 'Nguồn được Claude Web đọc')),
+                'cited_text' => trim((string) ($citation['cited_text'] ?? '')),
+            ])->take(8)->values()->all();
+        $policyUrl = filter_var($rawSignals['policy_url'] ?? null, FILTER_VALIDATE_URL)
+            ? (string) $rawSignals['policy_url']
+            : GooglePolicyReference::url($finding->category, $finding->policy_reference);
+
         return view('findings.show', ['finding' => [
             ...$this->row($finding),
-            'url' => $finding->page?->url ?? $finding->website->start_url,
+            'url' => $this->findingUrl($finding),
             'policy' => $finding->policy_reference ? UiText::text($finding->policy_reference) : 'Cần đối chiếu chính sách thủ công',
-            'policy_url' => GooglePolicyReference::url($finding->category, $finding->policy_reference),
+            'policy_url' => $policyUrl,
             'summary' => UiText::text($finding->summary),
             'evidence_quotes' => $evidenceQuotes,
+            'citations' => $citations,
             'duplicate_matches' => $duplicateMatches,
             'page_id' => $finding->page?->id,
         ]]);
@@ -160,14 +173,33 @@ final class FindingController extends Controller
             'site' => $finding->website->domain,
             'title' => UiText::text($finding->title),
             'category' => UiText::label($finding->category),
-            'source' => str_starts_with($finding->rule_key, 'ai.') ? 'AI' : 'Quy tắc',
+            'source' => $this->findingSource($finding),
             'severity' => $finding->severity,
             'confidence' => $finding->confidence,
             'affected' => $finding->page_id ? '1 URL' : 'Toàn website',
-            'url' => $finding->page?->url ?? $finding->website->start_url,
+            'url' => $this->findingUrl($finding),
             'detected' => $finding->last_seen_at->diffForHumans(),
             'status' => $finding->status,
         ];
+    }
+
+    private function findingUrl(Finding $finding): string
+    {
+        if ($finding->page?->url) {
+            return $finding->page->url;
+        }
+        $evidenceUrl = data_get($finding->signals, 'evidence_url');
+
+        return filter_var($evidenceUrl, FILTER_VALIDATE_URL) ? (string) $evidenceUrl : $finding->website->start_url;
+    }
+
+    private function findingSource(Finding $finding): string
+    {
+        if (data_get($finding->signals, 'analysis_source') === 'anthropic_web') {
+            return 'Claude Web';
+        }
+
+        return str_starts_with($finding->rule_key, 'ai.') ? 'AI theo URL' : 'Crawler';
     }
 
     private function visibleFindings(): Builder
@@ -230,7 +262,7 @@ final class FindingController extends Controller
                     fputcsv($output, [
                         $finding->public_id,
                         $finding->website->domain,
-                        $finding->page?->url,
+                        $this->findingUrl($finding),
                         UiText::label($finding->category),
                         UiText::label($finding->severity),
                         $finding->confidence,

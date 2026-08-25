@@ -13,6 +13,7 @@ final class AiPolicyAnalyzerTest extends TestCase
     public function test_it_uses_responses_api_structured_output_and_returns_ai_findings(): void
     {
         config()->set('maxguard.ai.enabled', true);
+        config()->set('maxguard.ai.provider', 'openai');
         config()->set('maxguard.ai.api_key', 'test-key');
         config()->set('maxguard.ai.base_url', 'https://api.openai.com/v1');
         config()->set('maxguard.ai.model', 'gpt-5.6-terra');

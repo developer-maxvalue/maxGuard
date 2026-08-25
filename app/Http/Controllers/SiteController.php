@@ -179,7 +179,7 @@ final class SiteController extends Controller
             'site' => array_merge($this->row($site), [
                 'policies' => $policies,
             ]),
-            'aiReady' => $aiConfiguration->isReady(),
+            'aiReady' => $aiConfiguration->isReady() || is_array(data_get($latestScan?->meta, 'web_review')),
             'maxUrlSafetyLimit' => max(1, (int) config('maxguard.crawler.max_discovered_urls', 100_000)),
             'ga4' => $site->ga4Connection,
             'trafficPages' => $site->pages()->where('ga4_views_7d', '>', 0)->orderByDesc('ga4_views_7d')->limit(20)->get(),
@@ -215,17 +215,23 @@ final class SiteController extends Controller
             ->paginate(25);
 
         return response()->json([
-            'data' => $findings->getCollection()->map(fn ($finding): array => [
-                'id' => $finding->public_id,
-                'url' => $finding->page?->url ?? $site->start_url,
-                'path' => $finding->page ? (parse_url($finding->page->url, PHP_URL_PATH) ?: '/') : '/',
-                'category' => UiText::label($finding->category),
-                'title' => UiText::text($finding->title),
-                'severity' => $finding->severity,
-                'severity_label' => UiText::label($finding->severity),
-                'confidence' => (int) $finding->confidence,
-                'evidence_url' => route('findings.show', $finding),
-            ])->values(),
+            'data' => $findings->getCollection()->map(function ($finding) use ($site): array {
+                $url = $finding->page?->url
+                    ?? (filter_var(data_get($finding->signals, 'evidence_url'), FILTER_VALIDATE_URL) ? data_get($finding->signals, 'evidence_url') : $site->start_url);
+
+                return [
+                    'id' => $finding->public_id,
+                    'url' => $url,
+                    'path' => parse_url($url, PHP_URL_PATH) ?: '/',
+                    'category' => UiText::label($finding->category),
+                    'title' => UiText::text($finding->title),
+                    'source' => data_get($finding->signals, 'analysis_source') === 'anthropic_web' ? 'Claude Web' : (str_starts_with($finding->rule_key, 'ai.') ? 'AI theo URL' : 'Crawler'),
+                    'severity' => $finding->severity,
+                    'severity_label' => UiText::label($finding->severity),
+                    'confidence' => (int) $finding->confidence,
+                    'evidence_url' => route('findings.show', $finding),
+                ];
+            })->values(),
             'meta' => [
                 'current_page' => $findings->currentPage(),
                 'last_page' => $findings->lastPage(),
@@ -240,16 +246,18 @@ final class SiteController extends Controller
     {
         $this->authorizeOwner($site);
 
-        if (! $configuration->isReady()) {
-            return back()->withErrors(['ai' => 'AI chưa được cấu hình. Hãy kiểm tra Cài đặt AI trước khi đánh giá.']);
-        }
-
         $scan = $site->scans()
             ->whereIn('status', [Scan::STATUS_COMPLETED, Scan::STATUS_PARTIAL])
             ->latest('finished_at')
             ->first();
         if ($scan === null) {
             return back()->withErrors(['ai' => 'Website cần có ít nhất một lượt quét hoàn tất trước khi AI đánh giá.']);
+        }
+        if ($configuration->isWebReviewReady() && ! is_array(data_get($scan->meta, 'web_review'))) {
+            return back()->withErrors(['ai' => 'Claude Web đang bật nhưng lượt quét này chưa có báo cáo realtime thành công. Hãy chạy lượt quét mới; hệ thống sẽ không thay thế âm thầm bằng bản tổng hợp crawler.']);
+        }
+        if (! $configuration->isReady() && ! is_array(data_get($scan->meta, 'web_review'))) {
+            return back()->withErrors(['ai' => 'Lượt quét này chưa có báo cáo Claude Web và AI kiểm tra từng URL đang tắt. Hãy chạy một lượt quét mới có bật AI.']);
         }
 
         try {

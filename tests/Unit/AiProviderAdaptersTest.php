@@ -75,6 +75,8 @@ final class AiProviderAdaptersTest extends TestCase
             'maxguard.ai.base_url' => 'https://api.anthropic.test/v1',
             'maxguard.ai.model' => 'claude-test-model',
             'maxguard.ai.min_confidence' => 70,
+            'maxguard.ai.max_output_tokens' => 5000,
+            'maxguard.ai.anthropic_max_output_tokens' => 6000,
         ]);
         Http::fake([
             'https://api.anthropic.test/v1/messages' => Http::response([

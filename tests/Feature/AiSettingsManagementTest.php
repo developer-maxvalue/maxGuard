@@ -57,10 +57,10 @@ final class AiSettingsManagementTest extends TestCase
                 'provider' => 'ollama',
                 'base_url' => 'http://127.0.0.1:11434',
                 'model' => 'qwen3:8b',
-                'test_connection' => '1',
+                'test_connection' => 'page',
             ]))
             ->assertRedirect()
-            ->assertSessionHas('status', 'Kết nối thành công đến Ollama.');
+            ->assertSessionHas('status', 'Kết nối thành công đến Ollama cho kiểm tra từng URL.');
 
         Http::assertSent(fn ($request): bool => $request->url() === 'http://127.0.0.1:11434/api/tags');
     }
@@ -76,14 +76,52 @@ final class AiSettingsManagementTest extends TestCase
                 'base_url' => 'https://api.anthropic.test/v1',
                 'api_key' => 'anthropic-test-key',
                 'model' => 'claude-sonnet-5',
-                'test_connection' => '1',
+                'test_connection' => 'page',
             ]))
             ->assertRedirect()
-            ->assertSessionHas('status', 'Kết nối thành công đến Claude/Anthropic.');
+            ->assertSessionHas('status', 'Kết nối thành công đến Claude/Anthropic cho kiểm tra từng URL.');
 
         Http::assertSent(fn ($request): bool => $request->url() === 'https://api.anthropic.test/v1/models'
             && $request->hasHeader('x-api-key', 'anthropic-test-key')
             && $request->hasHeader('anthropic-version', '2023-06-01'));
+    }
+
+    public function test_admin_can_configure_gemini_for_pages_and_claude_for_realtime_review(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+
+        $this->actingAs($admin)
+            ->patch(route('admin.ai-settings.update'), $this->payload([
+                'provider' => 'gemini',
+                'model' => 'gemini-2.5-flash',
+                'review_enabled' => '1',
+                'review_provider' => 'anthropic',
+                'review_base_url' => 'https://api.anthropic.test/v1',
+                'review_api_key' => 'review-secret-key',
+                'review_model' => 'claude-sonnet-4-6',
+            ]))
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $setting = AiSetting::query()->firstOrFail();
+        $this->assertSame('gemini', $setting->provider);
+        $this->assertSame('claude-sonnet-4-6', $setting->review_model);
+        $this->assertSame('review-secret-key', $setting->review_api_key);
+        $this->assertNotSame('review-secret-key', $setting->getRawOriginal('review_api_key'));
+        $this->assertSame('gemini-2.5-flash', config('maxguard.ai.model'));
+        $this->assertSame('claude-sonnet-4-6', config('maxguard.review_ai.model'));
+        $this->assertTrue(app(\App\Services\AiConfiguration::class)->isReady());
+        $this->assertTrue(app(\App\Services\AiConfiguration::class)->isWebReviewReady());
+
+        $this->actingAs($admin)
+            ->get(route('admin.ai-settings.index'))
+            ->assertOk()
+            ->assertSee('AI kiểm tra từng URL trong crawler')
+            ->assertSee('AI đánh giá tổng quan realtime')
+            ->assertSee('name="review_provider"', false)
+            ->assertSee('name="review_model"', false)
+            ->assertSee('value="claude-sonnet-4-6"', false)
+            ->assertDontSee('review-secret-key');
     }
 
     /** @param array<string, mixed> $overrides @return array<string, mixed> */
@@ -95,6 +133,9 @@ final class AiSettingsManagementTest extends TestCase
             'base_url' => 'https://generativelanguage.googleapis.com/v1beta',
             'api_key' => 'test-key',
             'model' => 'gemini-2.5-flash',
+            'review_provider' => 'anthropic',
+            'review_base_url' => 'https://api.anthropic.com/v1',
+            'review_model' => 'claude-sonnet-4-6',
             'output_language' => 'Vietnamese',
             'max_pages_per_scan' => 100,
             'min_confidence' => 70,

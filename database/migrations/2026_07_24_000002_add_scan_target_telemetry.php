@@ -36,7 +36,7 @@ return new class extends Migration
             $table->index(['scan_target_id', 'created_at']);
         });
 
-        if (Schema::hasTable('jobs')) {
+        if (DB::getDriverName() === 'mysql' && Schema::hasTable('jobs')) {
             DB::statement('ALTER TABLE `jobs` MODIFY `attempts` INT UNSIGNED NOT NULL DEFAULT 0');
         }
     }
@@ -46,7 +46,7 @@ return new class extends Migration
     {
         Schema::dropIfExists('scan_target_events');
         Schema::table('scan_targets', fn (Blueprint $table) => $table->dropColumn(['current_stage', 'debug_meta']));
-        if (Schema::hasTable('jobs')) {
+        if (DB::getDriverName() === 'mysql' && Schema::hasTable('jobs')) {
             DB::statement('ALTER TABLE `jobs` MODIFY `attempts` TINYINT UNSIGNED NOT NULL');
         }
     }

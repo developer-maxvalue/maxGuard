@@ -19,6 +19,11 @@ $aiBaseUrl = match ($aiProvider) {
     'anthropic' => env('ANTHROPIC_BASE_URL', 'https://api.anthropic.com/v1'),
     default => env('OPENAI_BASE_URL', 'https://api.openai.com/v1'),
 };
+$reviewAiProvider = env('MAXGUARD_REVIEW_AI_PROVIDER', 'anthropic');
+$reviewAiApiKey = match ($reviewAiProvider) {
+    'anthropic' => env('MAXGUARD_REVIEW_AI_API_KEY', env('ANTHROPIC_API_KEY')),
+    default => env('MAXGUARD_REVIEW_AI_API_KEY'),
+};
 
 return [
     // Set this to false when the host project already provides Breeze,
@@ -34,6 +39,26 @@ return [
     'page_queue' => env('MAXGUARD_PAGE_QUEUE', 'scan-pages'),
     'finalize_queue' => env('MAXGUARD_FINALIZE_QUEUE', 'scan-finalize'),
     'ai_assessment_queue' => env('MAXGUARD_AI_ASSESSMENT_QUEUE', env('MAXGUARD_FINALIZE_QUEUE', 'scan-finalize')),
+    'web_review' => [
+        'enabled' => (bool) env('MAXGUARD_WEB_REVIEW_ENABLED', true),
+        'queue' => env('MAXGUARD_WEB_REVIEW_QUEUE', env('MAXGUARD_QUEUE', 'scans')),
+        'search_tool' => env('MAXGUARD_WEB_SEARCH_TOOL', 'web_search_20260318'),
+        'fetch_tool' => env('MAXGUARD_WEB_FETCH_TOOL', 'web_fetch_20260318'),
+        'max_searches' => (int) env('MAXGUARD_WEB_REVIEW_MAX_SEARCHES', 8),
+        'max_fetches' => (int) env('MAXGUARD_WEB_REVIEW_MAX_FETCHES', 16),
+        'max_content_tokens' => (int) env('MAXGUARD_WEB_REVIEW_MAX_CONTENT_TOKENS', 15000),
+        'min_confidence' => (int) env('MAXGUARD_WEB_REVIEW_MIN_CONFIDENCE', 60),
+    ],
+    'review_ai' => [
+        'enabled' => (bool) env('MAXGUARD_REVIEW_AI_ENABLED', env('MAXGUARD_WEB_REVIEW_ENABLED', false)),
+        'provider' => $reviewAiProvider,
+        'api_key' => $reviewAiApiKey,
+        'base_url' => env('MAXGUARD_REVIEW_AI_BASE_URL', 'https://api.anthropic.com/v1'),
+        'model' => env('MAXGUARD_REVIEW_AI_MODEL', 'claude-sonnet-4-6'),
+        'connect_timeout_seconds' => (int) env('MAXGUARD_REVIEW_AI_CONNECT_TIMEOUT', 10),
+        'timeout_seconds' => (int) env('MAXGUARD_REVIEW_AI_TIMEOUT', 300),
+        'max_output_tokens' => (int) env('MAXGUARD_REVIEW_AI_MAX_OUTPUT_TOKENS', 8192),
+    ],
     'orchestrator_timeout_seconds' => (int) env('MAXGUARD_ORCHESTRATOR_TIMEOUT', 900),
     'page_job_timeout_seconds' => (int) env('MAXGUARD_PAGE_JOB_TIMEOUT', 1800),
     'finalize_timeout_seconds' => (int) env('MAXGUARD_FINALIZE_TIMEOUT', 900),

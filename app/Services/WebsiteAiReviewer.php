@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Scan;
+use App\Support\AiJsonDecoder;
 use App\Support\AnthropicJsonSchema;
 use App\Support\EssentialPublisherPages;
 use Illuminate\Http\Client\ConnectionException;
@@ -20,8 +21,18 @@ final class WebsiteAiReviewer
         $model = (string) config('maxguard.ai.model');
         $provider = (string) config('maxguard.ai.provider', 'openai');
         $context = $this->context($scan);
-        $payload = $this->request($provider, $model, $context);
-        $assessment = $this->applyPatternFindings($this->normalize($payload, $context), $context);
+        $webReview = data_get($scan->meta, 'web_review');
+        if (is_array($webReview)) {
+            $context['anthropic_web_review'] = $webReview;
+            $assessment = $this->normalize($this->assessmentPayloadFromWebReview($webReview), $context);
+            $assessment['assessment_source'] = 'anthropic_web';
+            $model = (string) config('maxguard.review_ai.model', data_get($scan->meta, 'web_review_model', $model));
+            $provider = (string) config('maxguard.review_ai.provider', 'anthropic');
+        } else {
+            $payload = $this->request($provider, $model, $context);
+            $assessment = $this->applyPatternFindings($this->normalize($payload, $context), $context);
+            $assessment['assessment_source'] = 'crawler_synthesis';
+        }
         $assessment['model'] = $model;
         $assessment['provider'] = $provider;
         $assessment['scan_id'] = $scan->id;
@@ -33,6 +44,78 @@ final class WebsiteAiReviewer
         ]);
 
         return $assessment;
+    }
+
+    /**
+     * Reuse Claude's realtime editorial report as the website assessment. The
+     * crawler continues to populate the detailed Findings report independently.
+     *
+     * @param  array<string, mixed>  $review
+     * @return array<string, mixed>
+     */
+    private function assessmentPayloadFromWebReview(array $review): array
+    {
+        $issues = collect((array) ($review['issues'] ?? []))
+            ->filter(fn ($issue): bool => is_array($issue))
+            ->map(function (array $issue): array {
+                $quotes = collect((array) ($issue['evidence_quotes'] ?? []))
+                    ->filter(fn ($quote): bool => is_string($quote) && trim($quote) !== '')
+                    ->take(3)
+                    ->values()
+                    ->all();
+
+                return [
+                    'title' => (string) ($issue['title'] ?? ''),
+                    'root_cause' => (string) ($issue['title'] ?? ''),
+                    'severity' => (string) ($issue['severity'] ?? 'review'),
+                    'category' => (string) ($issue['category'] ?? 'Publisher requirements'),
+                    'observation' => (string) ($issue['observation'] ?? ''),
+                    'risk_signal' => (string) ($issue['why_it_matters'] ?? ''),
+                    'why_it_matters' => (string) ($issue['why_it_matters'] ?? ''),
+                    'evidence' => implode(' ', $quotes),
+                    'supporting_evidence' => $quotes,
+                    'evidence_quotes' => $quotes,
+                    'citations' => (array) ($issue['citations'] ?? []),
+                    'policy_area' => (string) ($issue['category'] ?? 'Publisher requirements'),
+                    'confidence' => (int) ($issue['confidence'] ?? 50),
+                    'manual_verification' => 'Đối chiếu thêm quy trình biên tập và toàn bộ website trước khi kết luận vi phạm chính thức.',
+                    'alternative_explanation' => 'Mẫu quan sát được có thể xuất phát từ quy chuẩn biên tập hoặc cách tổ chức nội dung hợp lệ.',
+                    'alternative_assessment' => 'URL và trích dẫn là bằng chứng quan sát; kết luận cuối cùng vẫn cần kiểm tra thủ công.',
+                    'example_urls' => (array) ($issue['example_urls'] ?? []),
+                    'policy_url' => (string) ($issue['policy_url'] ?? ''),
+                ];
+            })
+            ->values()
+            ->all();
+        $policyReferences = collect($issues)
+            ->filter(fn (array $issue): bool => filter_var($issue['policy_url'], FILTER_VALIDATE_URL) !== false)
+            ->map(fn (array $issue): array => [
+                'section' => in_array($issue['category'], ['Content quality', 'Duplicate content', 'Copyright'], true)
+                    ? 'content_overview'
+                    : (in_array($issue['category'], ['Deceptive practices', 'Publisher requirements'], true)
+                        ? 'transparency_overview'
+                        : 'policy_overview'),
+                'issue' => $issue['title'],
+                'relevance' => $issue['why_it_matters'],
+                'policy_url' => $issue['policy_url'],
+            ])
+            ->unique('policy_url')
+            ->values()
+            ->all();
+
+        return [
+            'risk_level' => (string) ($review['risk_level'] ?? 'review'),
+            'headline' => (string) ($review['headline'] ?? 'Đánh giá website từ Claude Web'),
+            'summary' => (string) ($review['summary'] ?? ''),
+            'key_issues' => $issues,
+            'content_overview' => '',
+            'transparency_overview' => '',
+            'adsense_requirements_overview' => '',
+            'policy_overview' => (string) ($review['summary'] ?? ''),
+            'no_clear_violation_signals' => [],
+            'conclusion' => (string) ($review['conclusion'] ?? $review['summary'] ?? ''),
+            'policy_references' => $policyReferences,
+        ];
     }
 
     /** @return array<string, mixed> */
@@ -460,6 +543,7 @@ SQL)->first();
                 }
                 if ($contextType === 'editorial_mention') {
                     $editorialInstitutionMentions++;
+
                     continue;
                 }
                 if (! in_array($contextType, ['trust_claim', 'unverified_branding'], true)) {
@@ -593,23 +677,38 @@ SQL)->first();
             array_flip(['human_written_claim', 'no_ai_claim', 'originality_claim', 'expert_written_claim'])
         );
         if ($scaledPattern && $claims !== []) {
+            $claimQuotes = collect((array) ($evidence['publisher_claim_evidence'] ?? []))
+                ->filter(fn ($claim): bool => is_array($claim) && array_key_exists((string) ($claim['type'] ?? ''), $claims))
+                ->pluck('quote')->filter()->unique()->take(4)->values()->all();
+            $claimLabel = $claimQuotes !== []
+                ? '“'.implode('”; “', $claimQuotes).'”'
+                : implode(', ', array_keys($claims));
+            $claimSeverity = $scaledSignals >= 3 ? 'high' : 'review';
             $siteWideDrivers[] = 'tuyên bố tuyệt đối về nguồn gốc nội dung chưa được chứng minh tương xứng';
             $this->appendIssue($assessment, [
-                'title' => 'Tuyên bố tuyệt đối về tác giả và tính nguyên bản cần được xác minh',
+                'title' => 'Mâu thuẫn tín hiệu giữa lời cam kết và thực tế nội dung',
                 'root_cause' => 'Publisher claim and observed behavior mismatch',
-                'severity' => 'review',
+                'severity' => $claimSeverity,
                 'category' => 'Deceptive practices',
-                'observation' => 'Trang minh bạch có tuyên bố tuyệt đối trong khi dữ liệu site-wide đồng thời có nhiều tín hiệu xuất bản theo khuôn mẫu.',
-                'risk_signal' => 'Claim chưa được dữ liệu quan sát hỗ trợ đầy đủ và cần đối chiếu thủ công.',
-                'why_it_matters' => 'Website đưa ra tuyên bố mạnh như human-written/no AI/originality trong khi các mẫu xuất bản hàng loạt nêu trên vẫn hiện diện. Công cụ không kết luận nội dung do AI tạo, nhưng sự nhất quán của tuyên bố cần có bằng chứng.',
-                'evidence' => 'Tín hiệu tuyên bố tìm thấy: '.implode(', ', array_keys($claims)).'.',
-                'supporting_evidence' => ['Tuyên bố: '.implode(', ', array_keys($claims)), 'Mô hình xuất bản site-wide có ít nhất hai nhóm signal độc lập'],
+                'observation' => "Trang About/Disclaimer có cam kết {$claimLabel}; trong khi dữ liệu quét ghi nhận {$formulaic} tiêu đề theo công thức/cliffhanger ({$ratio}%), {$botAuthors} trang dùng tác giả dạng mã, cấu trúc phổ biến nhất xuất hiện trên {$structureRatio}% trang và tối đa {$maxPerDate} bài trong một ngày.",
+                'risk_signal' => 'Nhiều dấu hiệu độc lập cùng phù hợp với mô hình templated/scaled publishing, khiến cam kết tuyệt đối về con người viết/không AI/tính nguyên bản trở thành tín hiệu không nhất quán cần xác minh; đây chưa phải bằng chứng trực tiếp rằng nội dung do AI tạo.',
+                'why_it_matters' => 'Nếu Google review thủ công xác định quy trình sản xuất thực tế khác với tuyên bố công khai, chính cam kết tuyệt đối có thể làm tăng rủi ro bị đánh giá là trình bày sai hoặc gây hiểu lầm về nguồn gốc nội dung.',
+                'evidence' => "Cam kết {$claimLabel} được đặt cạnh ít nhất {$scaledSignals} nhóm tín hiệu site-wide độc lập của mô hình xuất bản theo khuôn mẫu/sản xuất hàng loạt.",
+                'supporting_evidence' => [
+                    "Cam kết được phát hiện: {$claimLabel}",
+                    "{$formulaic} tiêu đề theo công thức/cliffhanger ({$ratio}%)",
+                    "{$botAuthors} trang có tác giả dạng mã; tối đa {$maxPerDate} bài/ngày",
+                    "Structure signature phổ biến nhất chiếm {$structureRatio}% trang",
+                ],
                 'policy_area' => 'Deceptive practices',
-                'confidence' => 70,
+                'confidence' => $scaledSignals >= 3 ? 82 : 72,
                 'manual_verification' => 'Đối chiếu hồ sơ tác giả, quy trình biên tập, lịch sử bản thảo và công cụ được sử dụng; chưa đủ dữ liệu để kết luận publisher nói dối.',
                 'alternative_explanation' => 'Nội dung có thể thực sự do con người viết nhưng tuân theo template biên tập và dùng username nội bộ.',
-                'alternative_assessment' => 'Giải thích này có thể đúng; vì không có bằng chứng trực tiếp về công cụ tạo nội dung nên trạng thái phù hợp là questionable, không phải xác nhận gian dối.',
-                'example_urls' => array_slice((array) ($evidence['authorship_claim_example_urls'] ?? []), 0, 2),
+                'alternative_assessment' => 'Giải thích này có thể đúng; kết quả chỉ xác định mismatch signal cần kiểm tra, không xác nhận website dùng AI hoặc cố ý gian dối.',
+                'example_urls' => array_slice(array_values(array_unique(array_merge(
+                    (array) ($evidence['authorship_claim_example_urls'] ?? []),
+                    (array) ($evidence['formulaic_title_example_urls'] ?? [])
+                ))), 0, 2),
                 'policy_url' => 'https://support.google.com/publisherpolicies/answer/11185755?hl=vi',
             ]);
             $assessment['transparency_overview'] = trim((string) ($assessment['transparency_overview'] ?? '').' Website có tuyên bố tuyệt đối về việc con người viết/không dùng AI/tính nguyên bản, trong khi dữ liệu quét đồng thời cho thấy mô hình xuất bản hàng loạt; tính chính xác của tuyên bố cần được xác minh bằng quy trình và hồ sơ tác giả cụ thể.');
@@ -811,7 +910,9 @@ SQL)->first();
             && (($existing['title'] ?? null) === $issue['title']
                 || (! empty($issue['root_cause']) && mb_strtolower((string) ($existing['root_cause'] ?? '')) === mb_strtolower((string) $issue['root_cause']))));
         if ($existingIndex === false) {
-            $issues[] = $issue;
+            // Scanner-backed findings must not disappear when the model already
+            // returned the maximum number of issues and this method truncates it.
+            array_unshift($issues, $issue);
         } else {
             $existing = (array) $issues[$existingIndex];
             $existing['supporting_evidence'] = array_slice(array_values(array_unique(array_merge(
@@ -907,6 +1008,8 @@ SQL)->first();
                     (int) config('maxguard.ai.max_output_tokens', 3000),
                     (int) config('maxguard.ai.anthropic_max_output_tokens', 6000),
                 ),
+                'thinking' => ['type' => 'disabled'],
+                'effort' => 'low',
                 'system' => $system,
                 'messages' => [['role' => 'user', 'content' => $user]],
                 'output_config' => [
@@ -964,7 +1067,7 @@ SQL)->first();
         }
 
         try {
-            $decoded = json_decode($text, true, 512, JSON_THROW_ON_ERROR);
+            $decoded = AiJsonDecoder::decodeObject($text);
         } catch (\JsonException $exception) {
             throw new RuntimeException('Phản hồi đánh giá AI không phải JSON hợp lệ.', 0, $exception);
         }
@@ -995,7 +1098,7 @@ SQL)->first();
 You are MaxGuard's senior AdSense website reviewer. Perform a rigorous site-wide AdSense readiness and policy audit of the entire scanned dataset, comparable to a careful expert review, not a generic summary and not separate reviews of individual pages.
 Use every aggregate in whole_site_page_profile, whole_site_policy_profile, and every entry in adsense_policy_review_matrix. Explicitly assess: publisher identity and transparency; misleading representation and deceptive practices; required privacy/cookie disclosures and consent; original/useful content and replicated content; prohibited or harmful content; ad placement, accidental-click and ads-versus-content risks; technical crawlability; and the presence or absence of publisher information pages.
 Pay particular attention to content_pattern_evidence and cross_page_similarity_evidence. Evaluate repeated cliffhanger/"next part" title formulas, repeated content-structure signatures, generic author identifiers, concentrated publication dates, lexical near-duplicate findings, and semantic similarity across the supplied title/excerpt samples. Infer a scaled/templated/low-value publishing pattern only when multiple independent signals converge. State when semantic comparison is sample-limited; never relabel lexical similarity as semantic proof.
-Compare publisher_claim_evidence from About, Disclaimer, Editorial Policy and Author pages with measured site-wide behavior. In transparency_overview explicitly use one of consistent/questionable/contradictory/unknown for important claims. Do not assert AI generation or dishonesty without direct evidence. "Contradictory" requires strong direct counter-evidence; a production pattern alone normally supports "questionable", not "contradictory".
+Compare publisher_claim_evidence from About, Disclaimer, Editorial Policy and Author pages with measured site-wide behavior. In transparency_overview explicitly use one of consistent/questionable/contradictory/unknown for important claims. When an absolute human-written/no-AI/originality claim coexists with at least two independent scaled or templated production signals, add a prominent Deceptive practices issue titled as a claim-versus-observed-behavior mismatch and explain the possible manual-review consequence. You may describe this as a "mâu thuẫn tín hiệu" or "mismatch signal", while explicitly stating that the pattern does not itself prove AI generation or dishonesty. Reserve the final status "contradictory" for strong direct counter-evidence; otherwise use "questionable".
 Use potential_misleading_trust_signals with their element, alt, heading, surrounding_text, link, section context and claim_phrase. Distinguish an institution mentioned editorially inside an article from a logo/name presented under Trusted by, Partner, Featured in or Certified by. Editorial mentions must not become trust violations. When a trust-context relationship cannot be verified, use exactly: "Potential misleading trust signal – manual verification required"; never call it fake or forged.
 Treat sensitive_topics and presentation_styles as separate dimensions. Mental health, domestic violence, sexual assault and medical conditions are not automatically prohibited. Raise additional risk only where sensitive_topic_with_risky_presentation_pages or separate graphic/prohibited evidence shows sensational, exploitative, graphic or clickbait presentation.
 For each area, compare scanner evidence with the supplied Google expectation. State what was observed, why it matters under that expectation, and whether the evidence indicates a problem, no detected signal, or insufficient evidence. Make the assessment specific by citing relevant counts, ratios, distributions, and scan coverage. For every detected problem, add a key_issues item and cite 1-2 representative URLs copied verbatim from the supplied example_urls; never invent or reconstruct a URL. If no example URL is supplied, return an empty example_urls array and say the evidence is site-wide or not tied to a page.
@@ -1181,6 +1284,7 @@ PROMPT;
         $allowedExampleUrls = collect((array) data_get($context, 'whole_site_policy_profile.violation_groups', []))
             ->pluck('example_urls')
             ->merge(collect($patternEvidence)->filter(fn ($value, $key): bool => str_ends_with((string) $key, '_urls'))->values())
+            ->merge(collect((array) data_get($context, 'anthropic_web_review.issues', []))->pluck('example_urls'))
             ->flatten()
             ->filter(fn ($url): bool => filter_var($url, FILTER_VALIDATE_URL) !== false)
             ->unique()
@@ -1225,6 +1329,20 @@ PROMPT;
                         fn ($value): string => mb_substr(trim((string) $value), 0, 1000),
                         (array) ($issue['supporting_evidence'] ?? [])
                     ))), 0, 8),
+                    'evidence_quotes' => array_slice(array_values(array_filter(array_map(
+                        fn ($value): string => mb_substr(trim((string) $value), 0, 1200),
+                        (array) ($issue['evidence_quotes'] ?? [])
+                    ))), 0, 3),
+                    'citations' => collect((array) ($issue['citations'] ?? []))
+                        ->filter(fn ($citation): bool => is_array($citation) && filter_var($citation['url'] ?? null, FILTER_VALIDATE_URL) !== false)
+                        ->map(fn (array $citation): array => [
+                            'url' => (string) $citation['url'],
+                            'title' => mb_substr(trim((string) ($citation['title'] ?? '')), 0, 300),
+                            'cited_text' => mb_substr(trim((string) ($citation['cited_text'] ?? '')), 0, 1000),
+                        ])
+                        ->take(5)
+                        ->values()
+                        ->all(),
                     'policy_area' => mb_substr(trim((string) ($issue['policy_area'] ?? $category)), 0, 300),
                     'confidence' => max(0, min(100, (int) ($issue['confidence'] ?? 50))),
                     'manual_verification' => mb_substr(trim((string) ($issue['manual_verification'] ?? 'Cần xác minh thủ công trước khi kết luận vi phạm.')), 0, 2000),

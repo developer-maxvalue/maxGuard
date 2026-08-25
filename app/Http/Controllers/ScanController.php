@@ -57,8 +57,11 @@ final class ScanController extends Controller
                 'utilization' => min(100, (int) round(($runningTargets / max(1, $pageWorkers * $batchSize)) * 100)),
             ],
             'aiInfo' => [
-                'ready' => $aiConfiguration->isReady(),
-                'model' => (string) config('maxguard.ai.model', 'gpt-5.6-terra'),
+                'ready' => $aiConfiguration->anyReady(),
+                'page_ready' => $aiConfiguration->isReady(),
+                'page_model' => (string) config('maxguard.ai.model', 'gemini-2.5-flash'),
+                'review_ready' => $aiConfiguration->isWebReviewReady(),
+                'review_model' => (string) config('maxguard.review_ai.model', 'claude-sonnet-4-6'),
                 'page_limit' => (int) config('maxguard.ai.max_pages_per_scan', 100),
             ],
             'maxUrlSafetyLimit' => max(1, (int) config('maxguard.crawler.max_discovered_urls', 100_000)),

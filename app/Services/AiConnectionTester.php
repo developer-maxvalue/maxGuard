@@ -10,38 +10,40 @@ use Throwable;
 final class AiConnectionTester
 {
     /** @return array{success: bool, message: string} */
-    public function test(AiSetting $setting): array
+    public function test(AiSetting $setting, string $role = 'page'): array
     {
         try {
-            $baseUrl = rtrim($setting->base_url, '/');
+            $provider = $role === 'review' ? (string) $setting->review_provider : (string) $setting->provider;
+            $baseUrl = rtrim($role === 'review' ? (string) $setting->review_base_url : (string) $setting->base_url, '/');
+            $apiKey = $role === 'review' ? $setting->review_api_key : $setting->api_key;
             $request = Http::acceptJson()
                 ->connectTimeout(min(20, $setting->connect_timeout_seconds))
                 ->timeout(min(30, $setting->timeout_seconds))
                 ->retry(1, 300, fn (Throwable $error): bool => $error instanceof ConnectionException, false);
 
-            if ($setting->provider === 'gemini') {
-                if (blank($setting->api_key)) {
+            if ($provider === 'gemini') {
+                if (blank($apiKey)) {
                     return ['success' => false, 'message' => 'Gemini yêu cầu API key.'];
                 }
-                $response = $request->get($baseUrl.'/models', ['key' => $setting->api_key]);
-            } elseif ($setting->provider === 'anthropic') {
-                if (blank($setting->api_key)) {
+                $response = $request->get($baseUrl.'/models', ['key' => $apiKey]);
+            } elseif ($provider === 'anthropic') {
+                if (blank($apiKey)) {
                     return ['success' => false, 'message' => 'Claude/Anthropic yêu cầu API key.'];
                 }
                 $response = $request
                     ->withHeaders([
-                        'x-api-key' => $setting->api_key,
+                        'x-api-key' => $apiKey,
                         'anthropic-version' => '2023-06-01',
                     ])
                     ->get($baseUrl.'/models');
-            } elseif ($setting->provider === 'ollama') {
-                if (filled($setting->api_key)) {
-                    $request = $request->withToken($setting->api_key);
+            } elseif ($provider === 'ollama') {
+                if (filled($apiKey)) {
+                    $request = $request->withToken($apiKey);
                 }
                 $response = $request->get($baseUrl.'/api/tags');
             } else {
-                if (filled($setting->api_key)) {
-                    $request = $request->withToken($setting->api_key);
+                if (filled($apiKey)) {
+                    $request = $request->withToken($apiKey);
                 }
                 $response = $request->get($baseUrl.'/models');
             }
@@ -53,7 +55,9 @@ final class AiConnectionTester
                 ];
             }
 
-            return ['success' => true, 'message' => 'Kết nối thành công đến '.$this->providerName($setting->provider).'.'];
+            $roleLabel = $role === 'review' ? ' cho đánh giá realtime' : ' cho kiểm tra từng URL';
+
+            return ['success' => true, 'message' => 'Kết nối thành công đến '.$this->providerName($provider).$roleLabel.'.'];
         } catch (Throwable $error) {
             return ['success' => false, 'message' => 'Không thể kết nối: '.mb_substr($error->getMessage(), 0, 500)];
         }

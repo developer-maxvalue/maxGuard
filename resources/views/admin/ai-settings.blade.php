@@ -8,7 +8,7 @@
     <div class="mg-page-heading">
         <div>
             <h1>Cài đặt AI</h1>
-            <p>Quản lý nhà cung cấp và thông tin kết nối AI dùng chung cho toàn bộ hệ thống.</p>
+            <p>Cấu hình độc lập AI kiểm tra từng URL và AI đánh giá tổng quan website realtime.</p>
         </div>
         <span class="badge {{ $settings['source'] === 'database' ? 'badge-light-success' : 'badge-light-warning' }} fs-7">
             {{ $settings['source'] === 'database' ? 'Đang dùng cấu hình cơ sở dữ liệu' : 'Chưa lưu cấu hình cơ sở dữ liệu' }}
@@ -23,14 +23,14 @@
             <div class="card mg-card mb-5">
                 <div class="card-header border-0 pt-2">
                     <div class="card-title d-block">
-                        <h2 class="mg-card-title">Nhà cung cấp AI</h2>
-                        <p class="mg-card-subtitle">Chọn một kết nối dùng cho phân tích chính sách và nội dung.</p>
+                        <h2 class="mg-card-title">1. AI kiểm tra từng URL trong crawler</h2>
+                        <p class="mg-card-subtitle">Chạy bên trong luồng crawl để phân tích nội dung chi tiết của từng trang.</p>
                     </div>
                 </div>
                 <div class="card-body pt-1">
                     <label class="form-check form-switch form-check-custom form-check-solid mb-7">
                         <input class="form-check-input" type="checkbox" name="enabled" value="1" @checked(old('enabled', $settings['enabled']))>
-                        <span class="form-check-label fw-semibold">Bật phân tích AI cho hệ thống</span>
+                        <span class="form-check-label fw-semibold">Bật AI kiểm tra từng URL</span>
                     </label>
 
                     <div class="mb-6">
@@ -78,8 +78,67 @@
                 </div>
             </div>
 
+            <div class="card mg-card mb-5">
+                <div class="card-header border-0 pt-2">
+                    <div class="card-title d-block">
+                        <h2 class="mg-card-title">2. AI đánh giá tổng quan realtime</h2>
+                        <p class="mg-card-subtitle">Claude tự truy cập website bằng Web Search/Web Fetch và tạo nhận định giống Claude Web. Luồng này chạy song song với crawler.</p>
+                    </div>
+                </div>
+                <div class="card-body pt-1">
+                    <label class="form-check form-switch form-check-custom form-check-solid mb-7">
+                        <input class="form-check-input" type="checkbox" name="review_enabled" value="1" @checked(old('review_enabled', $settings['review']['enabled']))>
+                        <span class="form-check-label fw-semibold">Bật Claude Web đánh giá realtime</span>
+                    </label>
+
+                    <div class="mb-6">
+                        <label class="form-label fw-semibold">Nhà cung cấp đánh giá realtime</label>
+                        <div class="mg-scan-options">
+                            <label>
+                                <input type="radio" name="review_provider" value="anthropic" @checked(old('review_provider', $settings['review']['provider']) === 'anthropic')>
+                                <span><i class="bi bi-stars"></i><strong>Claude / Anthropic</strong><small>Web Search và Web Fetch trực tiếp</small></span>
+                            </label>
+                        </div>
+                        @error('review_provider')<div class="text-danger fs-8 mt-2">{{ $message }}</div>@enderror
+                        <div class="form-text">Provider được lưu độc lập với AI crawler. Hiện Anthropic là adapter realtime được hỗ trợ.</div>
+                    </div>
+
+                    <div class="row g-5">
+                        <div class="col-md-7">
+                            <label class="form-label fw-semibold" for="review-base-url">URL máy chủ API</label>
+                            <input id="review-base-url" class="form-control form-control-solid @error('review_base_url') is-invalid @enderror" type="url" name="review_base_url" value="{{ old('review_base_url', $settings['review']['base_url']) }}" required>
+                            @error('review_base_url')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                        </div>
+                        <div class="col-md-5">
+                            <label class="form-label fw-semibold" for="review-model">Mô hình đánh giá realtime</label>
+                            <input id="review-model" list="review-model-options" class="form-control form-control-solid @error('review_model') is-invalid @enderror" name="review_model" value="{{ old('review_model', $settings['review']['model']) }}" placeholder="claude-sonnet-4-6" required>
+                            <datalist id="review-model-options">
+                                <option value="claude-sonnet-4-6">Claude Sonnet 4.6</option>
+                                @if (($settings['review']['model'] ?? '') !== 'claude-sonnet-4-6')
+                                    <option value="{{ $settings['review']['model'] }}">Model đang lưu</option>
+                                @endif
+                            </datalist>
+                            @error('review_model')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                            <div class="form-text">Chọn gợi ý hoặc nhập trực tiếp model ID Anthropic khác.</div>
+                        </div>
+                    </div>
+
+                    <div class="mt-6">
+                        <label class="form-label fw-semibold" for="review-api-key">Anthropic API key riêng cho đánh giá realtime</label>
+                        <input id="review-api-key" class="form-control form-control-solid @error('review_api_key') is-invalid @enderror" type="password" name="review_api_key" autocomplete="new-password" placeholder="{{ $settings['review']['has_api_key'] ? 'Đã lưu khóa mã hóa — để trống nếu không thay đổi' : 'Nhập Anthropic API key' }}">
+                        @error('review_api_key')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                        <div class="d-flex align-items-center justify-content-between mt-2">
+                            <span class="form-text">Có thể khác hoàn toàn API key của AI crawler.</span>
+                            @if ($settings['review']['has_api_key'])
+                                <label class="form-check form-check-sm"><input class="form-check-input" type="checkbox" name="clear_review_api_key" value="1"><span class="form-check-label text-danger">Xóa khóa đã lưu</span></label>
+                            @endif
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div class="card mg-card">
-                <div class="card-header border-0 pt-2"><div class="card-title d-block"><h2 class="mg-card-title">Giới hạn và chất lượng</h2><p class="mg-card-subtitle">Kiểm soát chi phí, thời gian và độ nhạy của kết quả.</p></div></div>
+                <div class="card-header border-0 pt-2"><div class="card-title d-block"><h2 class="mg-card-title">Giới hạn AI từng URL</h2><p class="mg-card-subtitle">Kiểm soát chi phí, thời gian và độ nhạy của phân tích nằm trong crawler.</p></div></div>
                 <div class="card-body pt-1">
                     <div class="row g-5">
                         <div class="col-md-6"><label class="form-label">Ngôn ngữ kết quả</label><input class="form-control" name="output_language" value="{{ old('output_language', $settings['output_language']) }}" required></div>
@@ -101,7 +160,7 @@
                     <li><i class="bi bi-check2"></i>API key được mã hóa trong cơ sở dữ liệu</li>
                     <li><i class="bi bi-check2"></i>Chỉ quản trị viên được thay đổi cấu hình</li>
                     <li><i class="bi bi-check2"></i>Khóa bí mật không được gửi lại trình duyệt</li>
-                    <li><i class="bi bi-check2"></i>Cấu hình áp dụng cho cả queue worker</li>
+                    <li><i class="bi bi-check2"></i>Hai kết nối được áp dụng độc lập cho queue worker</li>
                 </ul>
             </div></div>
 
@@ -115,7 +174,8 @@
 
             <div class="d-grid gap-3">
                 <button class="btn btn-primary btn-lg" type="submit"><i class="bi bi-check2-circle me-2"></i>Lưu cài đặt</button>
-                <button class="btn btn-light-primary" type="submit" name="test_connection" value="1"><i class="bi bi-plug me-2"></i>Lưu và kiểm tra kết nối</button>
+                <button class="btn btn-light-primary" type="submit" name="test_connection" value="page"><i class="bi bi-plug me-2"></i>Lưu và test AI từng URL</button>
+                <button class="btn btn-light-primary" type="submit" name="test_connection" value="review"><i class="bi bi-globe2 me-2"></i>Lưu và test Claude Web</button>
             </div>
         </div>
     </form>

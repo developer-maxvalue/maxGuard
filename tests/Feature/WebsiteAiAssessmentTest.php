@@ -273,6 +273,7 @@ final class WebsiteAiAssessmentTest extends TestCase
             'maxguard.ai.output_language' => 'Vietnamese',
             'maxguard.ai.timeout_seconds' => 120,
             'maxguard.ai.anthropic_timeout_seconds' => 300,
+            'maxguard.ai.max_output_tokens' => 5000,
             'maxguard.ai.anthropic_max_output_tokens' => 6000,
         ]);
         Http::fake([
@@ -328,6 +329,8 @@ final class WebsiteAiAssessmentTest extends TestCase
                 && $request->hasHeader('x-api-key', 'anthropic-test-key')
                 && $request->hasHeader('anthropic-version', '2023-06-01')
                 && data_get($request->data(), 'output_config.format.type') === 'json_schema'
+                && data_get($request->data(), 'thinking.type') === 'disabled'
+                && data_get($request->data(), 'effort') === 'low'
                 && $request['max_tokens'] === 6000
                 && ! array_key_exists('temperature', $request->data())
                 && ! str_contains((string) $schema, 'maxItems');

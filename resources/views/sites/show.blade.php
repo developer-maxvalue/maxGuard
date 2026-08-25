@@ -143,9 +143,16 @@
                 <div class="d-flex align-items-start justify-content-between gap-4 flex-wrap mb-5">
                     <div>
                         <h3 class="fs-4 mb-0">{{ $aiAssessment['headline'] ?? 'Đánh giá tình trạng website' }}</h3>
+                        @if (($aiAssessment['assessment_source'] ?? null) === 'anthropic_web')
+                            <span class="badge bg-light-primary text-primary mt-2">Claude Web · dữ liệu website realtime</span>
+                        @endif
                     </div>
                     <x-status-badge :status="$aiAssessment['risk_level'] ?? $site['status']" />
                 </div>
+
+                @if (!empty($aiAssessment['summary']))
+                    <p class="text-gray-700 mb-5">{{ $aiAssessment['summary'] }}</p>
+                @endif
 
                 @if (!empty($aiAssessment['key_issues']))
                     <h3 class="fs-5 mb-4">Các dấu hiệu rủi ro đáng chú ý</h3>
@@ -161,6 +168,13 @@
                                 @endif
                                 @if (!empty($issue['why_it_matters']))
                                     <p class="text-gray-700 mb-3">{{ $issue['why_it_matters'] }}</p>
+                                @endif
+                                @if (!empty($issue['evidence_quotes']))
+                                    <div class="border-start border-3 border-primary ps-3 mb-3 text-gray-600 fs-8">
+                                        @foreach (array_slice((array) $issue['evidence_quotes'], 0, 3) as $quote)
+                                            <div class="mb-1">“{{ $quote }}”</div>
+                                        @endforeach
+                                    </div>
                                 @endif
                                 @if (!empty($issue['example_urls']))
                                     <div class="mb-2">
@@ -346,6 +360,7 @@
                     <thead>
                         <tr class="text-uppercase text-muted fs-8">
                             <th>URL</th>
+                            <th>Nguồn</th>
                             <th>Danh mục</th>
                             <th>Phát hiện</th>
                             <th>Mức độ</th>
@@ -355,9 +370,17 @@
                     </thead>
                     <tbody id="finding-report-body">
                         @forelse ($findingReport as $finding)
+                            @php
+                                $findingUrl = $finding->page?->url
+                                    ?? (filter_var(data_get($finding->signals, 'evidence_url'), FILTER_VALIDATE_URL) ? data_get($finding->signals, 'evidence_url') : $site['start_url']);
+                                $findingSource = data_get($finding->signals, 'analysis_source') === 'anthropic_web'
+                                    ? 'Claude Web'
+                                    : (str_starts_with($finding->rule_key, 'ai.') ? 'AI theo URL' : 'Crawler');
+                            @endphp
                             <tr>
-                                <td class="mw-350px"><a class="d-block text-truncate fw-semibold" href="{{ $finding->page?->url ?? $site['start_url'] }}"
-                                        target="_blank" rel="noopener noreferrer">{{ $finding->page ? (parse_url($finding->page->url, PHP_URL_PATH) ?: '/') : '/' }}</a></td>
+                                <td class="mw-350px"><a class="d-block text-truncate fw-semibold" href="{{ $findingUrl }}"
+                                        target="_blank" rel="noopener noreferrer">{{ parse_url($findingUrl, PHP_URL_PATH) ?: '/' }}</a></td>
+                                <td><span class="badge {{ $findingSource === 'Claude Web' ? 'badge-light-info' : 'badge-light' }}">{{ $findingSource }}</span></td>
                                 <td>{{ \App\Support\UiText::label($finding->category) }}</td>
                                 <td class="text-gray-700">{{ \App\Support\UiText::text($finding->title) }}</td>
                                 <td><x-status-badge :status="$finding->severity" /></td>
@@ -366,7 +389,7 @@
                                         class="btn btn-sm btn-light-primary">Xem bằng chứng</a></td>
                             </tr>
                         @empty
-                            <tr><td colspan="6" class="text-center text-muted py-7">Không có phát hiện phù hợp với bộ lọc.</td></tr>
+                            <tr><td colspan="7" class="text-center text-muted py-7">Không có phát hiện phù hợp với bộ lọc.</td></tr>
                         @endforelse
                     </tbody>
                 </table>
@@ -435,7 +458,7 @@
                 if (!items.length) {
                     const row = element('tr');
                     const cell = element('td', 'text-center text-muted py-7', 'Không có phát hiện phù hợp với bộ lọc.');
-                    cell.colSpan = 6;
+                    cell.colSpan = 7;
                     row.append(cell);
                     reportBody.append(row);
                     return;
@@ -448,6 +471,7 @@
                     url.target = '_blank';
                     url.rel = 'noopener noreferrer';
                     appendCell(row, url, 'mw-350px');
+                    appendCell(row, element('span', `badge ${item.source === 'Claude Web' ? 'badge-light-info' : 'badge-light'}`, item.source));
                     appendCell(row, element('span', '', item.category));
                     appendCell(row, element('span', 'text-gray-700', item.title));
                     appendCell(row, element('span', `badge mg-status mg-status-${tones[item.severity] || 'secondary'}`, item.severity_label));
