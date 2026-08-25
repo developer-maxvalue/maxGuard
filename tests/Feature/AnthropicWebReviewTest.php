@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\GenerateWebsiteAiAssessment;
 use App\Jobs\RunAnthropicWebReview;
 use App\Models\Scan;
 use App\Models\User;
@@ -89,13 +90,18 @@ final class AnthropicWebReviewTest extends TestCase
         $website = $this->website($owner);
         $scan = $website->scans()->create([
             'type' => 'full',
-            'status' => Scan::STATUS_RUNNING,
-            'progress' => 10,
+            'status' => Scan::STATUS_COMPLETED,
+            'progress' => 100,
             'use_ai' => true,
-            'meta' => ['web_review_status' => 'running'],
+            'finished_at' => now(),
+            'meta' => ['web_review_status' => 'failed'],
         ]);
 
-        app(AnthropicWebReviewer::class)->reviewAndStore($scan);
+        (new GenerateWebsiteAiAssessment($scan->id))->handle(
+            app(\App\Services\AiConfiguration::class),
+            app(\App\Services\WebsiteAiReviewer::class),
+            app(AnthropicWebReviewer::class),
+        );
 
         $finding = $scan->findings()->firstOrFail();
         $this->assertNull($finding->page_id);
@@ -107,8 +113,7 @@ final class AnthropicWebReviewTest extends TestCase
         $this->assertSame('Có tín hiệu nội dung xuất bản theo mẫu', data_get($scan->fresh()->meta, 'web_review.headline'));
         $this->assertSame(2, data_get($scan->fresh()->meta, 'web_review_usage.server_tool_use.web_fetch_requests'));
 
-        $scan->update(['status' => Scan::STATUS_COMPLETED, 'finished_at' => now()]);
-        $assessment = app(\App\Services\WebsiteAiReviewer::class)->reviewAndStore($scan->fresh());
+        $assessment = $scan->fresh()->ai_assessment;
         $this->assertSame('anthropic_web', $assessment['assessment_source']);
         $this->assertSame('Mẫu nội dung lặp lại trên bài viết', data_get($assessment, 'key_issues.0.title'));
         $this->assertSame(['https://publisher.example/repeated-story'], data_get($assessment, 'key_issues.0.example_urls'));
@@ -154,6 +159,30 @@ final class AnthropicWebReviewTest extends TestCase
         Queue::assertPushed(RunAnthropicWebReview::class, fn (RunAnthropicWebReview $job): bool => $job->scanId === $scan->id
             && $job->queue === 'scans');
         $this->assertSame('queued', data_get($scan->fresh()->meta, 'web_review_status'));
+    }
+
+    public function test_manual_assessment_queues_realtime_review_for_an_existing_scan(): void
+    {
+        Queue::fake();
+        $this->configureAnthropic();
+        $owner = User::factory()->create();
+        $website = $this->website($owner);
+        $scan = $website->scans()->create([
+            'type' => 'full',
+            'status' => Scan::STATUS_COMPLETED,
+            'progress' => 100,
+            'use_ai' => true,
+            'finished_at' => now(),
+            'meta' => ['web_review_status' => 'failed'],
+        ]);
+
+        $this->actingAs($owner)
+            ->post(route('sites.ai-assessment', $website))
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        Queue::assertPushed(GenerateWebsiteAiAssessment::class, fn (GenerateWebsiteAiAssessment $job): bool => $job->scanId === $scan->id);
+        $this->assertSame('queued', data_get($scan->fresh()->meta, 'ai_assessment_status'));
     }
 
     private function configureAnthropic(): void

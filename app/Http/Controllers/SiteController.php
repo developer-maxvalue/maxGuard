@@ -179,7 +179,7 @@ final class SiteController extends Controller
             'site' => array_merge($this->row($site), [
                 'policies' => $policies,
             ]),
-            'aiReady' => $aiConfiguration->isReady() || is_array(data_get($latestScan?->meta, 'web_review')),
+            'aiReady' => $aiConfiguration->anyReady() || is_array(data_get($latestScan?->meta, 'web_review')),
             'maxUrlSafetyLimit' => max(1, (int) config('maxguard.crawler.max_discovered_urls', 100_000)),
             'ga4' => $site->ga4Connection,
             'trafficPages' => $site->pages()->where('ga4_views_7d', '>', 0)->orderByDesc('ga4_views_7d')->limit(20)->get(),
@@ -253,11 +253,8 @@ final class SiteController extends Controller
         if ($scan === null) {
             return back()->withErrors(['ai' => 'Website cần có ít nhất một lượt quét hoàn tất trước khi AI đánh giá.']);
         }
-        if ($configuration->isWebReviewReady() && ! is_array(data_get($scan->meta, 'web_review'))) {
-            return back()->withErrors(['ai' => 'Claude Web đang bật nhưng lượt quét này chưa có báo cáo realtime thành công. Hãy chạy lượt quét mới; hệ thống sẽ không thay thế âm thầm bằng bản tổng hợp crawler.']);
-        }
-        if (! $configuration->isReady() && ! is_array(data_get($scan->meta, 'web_review'))) {
-            return back()->withErrors(['ai' => 'Lượt quét này chưa có báo cáo Claude Web và AI kiểm tra từng URL đang tắt. Hãy chạy một lượt quét mới có bật AI.']);
+        if (! $configuration->anyReady() && ! is_array(data_get($scan->meta, 'web_review'))) {
+            return back()->withErrors(['ai' => 'AI chưa được cấu hình hoặc đã bị tắt.']);
         }
 
         try {

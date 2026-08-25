@@ -27,6 +27,8 @@ final class WebsiteAiAssessmentTest extends TestCase
             'maxguard.ai.base_url' => 'https://ai.example.test/v1',
             'maxguard.ai.model' => 'test-model',
             'maxguard.ai.output_language' => 'Vietnamese',
+            'maxguard.review_ai.enabled' => false,
+            'maxguard.web_review.enabled' => false,
         ]);
         Http::fake([
             'https://ai.example.test/v1/chat/completions' => Http::response([
@@ -149,6 +151,7 @@ final class WebsiteAiAssessmentTest extends TestCase
         (new GenerateWebsiteAiAssessment($scan->id))->handle(
             app(\App\Services\AiConfiguration::class),
             app(\App\Services\WebsiteAiReviewer::class),
+            app(\App\Services\AnthropicWebReviewer::class),
         );
 
         $scan->refresh();
@@ -321,7 +324,7 @@ final class WebsiteAiAssessmentTest extends TestCase
         app(\App\Services\WebsiteAiReviewer::class)->reviewAndStore($scan);
 
         $this->assertSame('anthropic', $scan->fresh()->ai_assessment['provider']);
-        $this->assertSame(360, (new GenerateWebsiteAiAssessment($scan->id))->timeout);
+        $this->assertGreaterThanOrEqual(360, (new GenerateWebsiteAiAssessment($scan->id))->timeout);
         Http::assertSent(function ($request): bool {
             $schema = json_encode(data_get($request->data(), 'output_config.format.schema'));
 

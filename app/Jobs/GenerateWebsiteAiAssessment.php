@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\Scan;
 use App\Services\AiConfiguration;
+use App\Services\AnthropicWebReviewer;
 use App\Services\WebsiteAiReviewer;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
@@ -36,7 +37,10 @@ final class GenerateWebsiteAiAssessment implements ShouldBeUnique, ShouldQueue
         if ((string) config('maxguard.ai.provider') === 'anthropic') {
             $requestTimeout = max($requestTimeout, (int) config('maxguard.ai.anthropic_timeout_seconds', 300));
         }
-        $this->timeout = max(300, $requestTimeout + 60);
+        if ((bool) config('maxguard.review_ai.enabled', false)) {
+            $requestTimeout = max($requestTimeout, (int) config('maxguard.review_ai.timeout_seconds', 300));
+        }
+        $this->timeout = max(360, $requestTimeout + 120);
         $this->uniqueFor = $this->timeout * $this->tries + 600;
     }
 
@@ -45,11 +49,41 @@ final class GenerateWebsiteAiAssessment implements ShouldBeUnique, ShouldQueue
         return 'maxguard-ai-assessment-'.$this->scanId;
     }
 
-    public function handle(AiConfiguration $configuration, WebsiteAiReviewer $reviewer): void
+    public function handle(
+        AiConfiguration $configuration,
+        WebsiteAiReviewer $reviewer,
+        AnthropicWebReviewer $webReviewer,
+    ): void
     {
+        $configuration->apply();
         $scan = Scan::query()->findOrFail($this->scanId);
         if (! in_array($scan->status, [Scan::STATUS_COMPLETED, Scan::STATUS_PARTIAL], true)) {
             return;
+        }
+
+        // A manual assessment may target an older, already completed scan that
+        // predates realtime review. Run Claude Web now instead of forcing the
+        // user to crawl the website again.
+        if (! is_array(data_get($scan->meta, 'web_review')) && $configuration->isWebReviewReady()) {
+            $this->updateMeta($scan, [
+                'web_review_status' => 'running',
+                'web_review_started_at' => now()->toIso8601String(),
+                'web_review_error' => null,
+                'web_review_failed_at' => null,
+            ]);
+
+            try {
+                $webReviewer->reviewAndStore($scan->fresh());
+                $scan = $scan->fresh();
+            } catch (Throwable $exception) {
+                $this->updateMeta($scan->fresh(), [
+                    'web_review_status' => 'failed',
+                    'web_review_error' => mb_substr($exception->getMessage(), 0, 1000),
+                    'web_review_failed_at' => now()->toIso8601String(),
+                ]);
+
+                throw new RuntimeException('Claude Web không thể tạo báo cáo realtime: '.$exception->getMessage(), 0, $exception);
+            }
         }
         if (! is_array(data_get($scan->meta, 'web_review')) && ! $configuration->isReady()) {
             throw new RuntimeException('AI chưa được cấu hình hoặc đã bị tắt.');
